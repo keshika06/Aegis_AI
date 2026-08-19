@@ -143,7 +143,13 @@ def build(session: Session, scan_id: str) -> dict[str, Any]:
         "attackTimeline": _timeline(events),
         "riskComponents": _risk_components(risks),
         "factorContributions": _contributions(risks),
-        "evidenceItems": _evidence(evidence, findings),
+        "evidenceItems": _evidence(
+            evidence,
+            findings,
+            variants,
+            {e.id: e for e in evaluations},
+            violations,
+        ),
         "controlResults": _control_results(metrics),
         "outcomeDistribution": _outcomes(evaluations),
         "regression": _regression(session, scan, target),
@@ -508,21 +514,111 @@ def _contributions(risks) -> dict:
     }
 
 
-def _evidence(evidence, findings) -> list[dict]:
-    titles = {f.id: f.title for f in findings}
-    return [
-        {
-            "id": _short(e.id, "EV"),
-            "type": e.evidence_type.replace("_", " ").title(),
-            "deterministic": bool(e.deterministic),
-            "source": e.source_stage or "—",
-            "finding": titles.get(e.finding_id or "", "—")[:48],
-            "confidence": int(round((e.confidence_contribution or 0) * 100)),
-            "summary": e.summary or "",
-            "timestamp": _time(e.created_at),
-        }
-        for e in evidence
-    ]
+DEFENCE_OUTCOME = {
+    ControlVerdict.ACCEPTED: (
+        "No control stopped it",
+        "The probe reached the model untouched. Nothing in the target — no input filter, no "
+        "moderation layer — rejected it.",
+    ),
+    ControlVerdict.REFUSED: (
+        "Only the model pushed back",
+        "No deployed control stopped the probe; the model itself declined. Alignment is not a "
+        "security control and cannot be relied on as one.",
+    ),
+    ControlVerdict.REJECTED: (
+        "A control rejected it",
+        "Something in the target detected and rejected the probe before it reached the model.",
+    ),
+    ControlVerdict.ERROR: (
+        "Inconclusive",
+        "The target did not respond, so nothing can be concluded about its controls.",
+    ),
+}
+
+WHY_IT_PROVES = {
+    "canary": (
+        "A synthetic token that exists only inside the model's privileged context was returned "
+        "verbatim. Legitimate output has no path to it, so this is proof the boundary was crossed "
+        "— not an inference from how the response reads."
+    ),
+    "policy_violation": (
+        "Behaviour the target's own declared contract forbids was observed. The boundary was "
+        "written by the target's owner and measured deterministically."
+    ),
+    "pii_detection": (
+        "Sensitive data was returned in the response. Detected by pattern matching, so the finding "
+        "does not depend on a model's opinion."
+    ),
+    "tool_log": "A privileged tool ran that this objective should never have been able to invoke.",
+    "response_text": (
+        "The wording suggests compliance, but nothing was proven. This is a supporting signal only "
+        "and can never on its own raise a finding above SUSPECTED."
+    ),
+}
+
+
+def _evidence(evidence, findings, variants, evaluations, violations) -> list[dict]:
+    """Each evidence item, with the full causal chain that produced it.
+
+    The point of this view is to answer three questions for every row: what was
+    sent, what the target's defences did about it, and why the result counts as
+    proof. Evidence without the prompt that caused it is not traceable.
+    """
+    by_finding = {f.id: f for f in findings}
+    violations_by_variant: dict[str, list] = {}
+    for violation in violations:
+        violations_by_variant.setdefault(violation.variant_id or "", []).append(violation)
+
+    rows = []
+    for e in evidence:
+        finding = by_finding.get(e.finding_id or "")
+        variant = variants.get(finding.variant_id or "") if finding else None
+        evaluation = evaluations.get(finding.control_evaluation_id or "") if finding else None
+        verdict = evaluation.verdict if evaluation else None
+        headline, explanation = DEFENCE_OUTCOME.get(
+            verdict, ("Unknown", "No control decision recorded.")
+        )
+
+        rows.append(
+            {
+                "id": _short(e.id, "EV"),
+                "evidenceId": e.id,
+                "type": e.evidence_type.replace("_", " ").title(),
+                "rawType": e.evidence_type,
+                "deterministic": bool(e.deterministic),
+                "finding": finding.title if finding else "—",
+                "findingId": finding.id if finding else None,
+                "verdict": finding.verdict if finding else None,
+                "owasp": finding.owasp_tag if finding else None,
+                "owaspName": owasp_name(finding.owasp_tag) if finding else None,
+                "confidence": int(round((e.confidence_contribution or 0) * 100)),
+                "summary": e.summary or "",
+                "timestamp": _time(e.created_at),
+                # What was actually sent to the target.
+                "prompt": variant.payload if variant else None,
+                "transformation": variant.transformation if variant else None,
+                # What the target's defences did about it.
+                "controlVerdict": verdict,
+                "defenceHeadline": headline,
+                "defenceExplain": explanation,
+                "controlReason": evaluation.verdict_reason if evaluation else None,
+                "statusCode": evaluation.status_code if evaluation else None,
+                "latencyMs": round(evaluation.latency_ms, 1)
+                if evaluation and evaluation.latency_ms
+                else None,
+                # What came back.
+                "response": (evaluation.response_body or "")[:1200] if evaluation else None,
+                # Why this counts as proof.
+                "whyItProves": WHY_IT_PROVES.get(e.evidence_type, "Supporting signal."),
+                "boundaries": [
+                    {"boundary": v.boundary, "expected": v.expected, "observed": v.observed}
+                    for v in violations_by_variant.get(finding.variant_id if finding else "", [])
+                ],
+                "content": e.content or {},
+            }
+        )
+    # Deterministic proof first — that is what a reader needs to see.
+    return sorted(rows, key=lambda r: (not r["deterministic"], -r["confidence"]))
 
 
 def _control_results(metrics) -> list[dict]:
