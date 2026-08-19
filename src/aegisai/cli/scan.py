@@ -96,9 +96,16 @@ def run_scan(
         counts = {v.value: 0 for v in FindingVerdict}
         for finding in findings:
             counts[finding.verdict] = counts.get(finding.verdict, 0) + 1
-        report_path = str(app_ctx.config.reports_dir / f"{scan_id}.json")
+        json_path = str(app_ctx.config.reports_dir / f"{scan_id}.json")
+        html_path = str(app_ctx.config.reports_dir / f"{scan_id}.html")
 
-    payload = {"scan_id": scan_id, "target": target_url, "findings": counts, "report": report_path}
+    payload = {
+        "scan_id": scan_id,
+        "target": target_url,
+        "findings": counts,
+        "report": json_path,
+        "report_html": html_path,
+    }
 
     def render() -> None:
         app_ctx.console.print()
@@ -112,8 +119,11 @@ def run_scan(
             f"  {headline} · {counts.get(FindingVerdict.LIKELY, 0)} LIKELY "
             f"· {counts.get(FindingVerdict.SUSPECTED, 0)} SUSPECTED"
         )
-        app_ctx.console.print(f"  [dim]report: {report_path}[/dim]")
-        app_ctx.console.print(f"  [dim]details: aegisai findings list {scan_id}[/dim]\n")
+        # The HTML report is what a person actually opens, so it leads and comes
+        # with a copy-pasteable command — the full path is easy to mistype.
+        app_ctx.console.print(f"\n  [bold]report[/bold]  open {html_path}")
+        app_ctx.console.print(f"  [dim]json    {json_path}[/dim]")
+        app_ctx.console.print(f"  [dim]details aegisai findings list {scan_id}[/dim]\n")
 
     output.emit(app_ctx, payload, render)
 
@@ -223,18 +233,50 @@ def cancel_scan(
 @app.command("report")
 def scan_report(
     ctx: typer.Context,
-    scan_id: str = typer.Argument(..., help="Scan id."),
-    fmt: str = typer.Option("json", "--format", help="json (html and pdf land in Phase 6)"),
+    scan_id: str | None = typer.Argument(None, help="Scan id. Omit to use the most recent scan."),
+    fmt: str = typer.Option("json", "--format", help="json | html"),
+    open_: bool = typer.Option(False, "--open", help="Open the report in your browser."),
 ) -> None:
-    """Print the stored report for a scan."""
+    """Print or open the stored report for a scan."""
     app_ctx: AppContext = ctx.obj
-    if fmt != "json":
-        planned(f"scan report --format {fmt}", "Phase 6 (reporting)")
 
-    path = app_ctx.config.reports_dir / f"{scan_id}.json"
+    if fmt not in {"json", "html"}:
+        planned(f"scan report --format {fmt}", "a later phase")
+
+    # Reaching for the newest scan is what people mean when they omit the id,
+    # and it saves copying a 12-character hex string off the previous screen.
+    if scan_id is None:
+        with session_scope(app_ctx.engine()) as session:
+            latest = session.scalar(select(Scan).order_by(Scan.created_at.desc()))
+            if latest is None:
+                raise NotFoundError(
+                    "No scans recorded yet.",
+                    hint="Run one with:  aegisai scan run <target>",
+                )
+            scan_id = latest.id
+
+    path = app_ctx.config.reports_dir / f"{scan_id}.{fmt}"
     if not path.exists():
         raise NotFoundError(
-            f"No report found for '{scan_id}'.",
-            hint=f"Run the scan first:  aegisai scan run <target>   (expected {path})",
+            f"No {fmt.upper()} report for '{scan_id}'.",
+            hint=f"Expected it at {path}. Run:  aegisai scan run <target>",
         )
+
+    if open_:
+        import subprocess
+        import sys
+
+        opener = {"darwin": "open", "win32": "start"}.get(sys.platform, "xdg-open")
+        subprocess.run([opener, str(path)], check=False)
+        output.success(app_ctx, f"opened {path}")
+        return
+
+    if fmt == "html":
+        # Printing 30 KB of markup into a terminal helps nobody.
+        output.success(app_ctx, str(path))
+        app_ctx.console.print(
+            f"  [dim]view it with:  aegisai scan report {scan_id} --format html --open[/dim]"
+        )
+        return
+
     app_ctx.console.print_json(jsonlib.dumps(jsonlib.loads(path.read_text(encoding="utf-8"))))

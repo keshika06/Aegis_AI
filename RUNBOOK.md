@@ -120,10 +120,12 @@ aegisai chain show <scan-id>           # correlated exploit paths
 aegisai risk show <scan-id>            # every scoring factor and its weight
 ```
 
-Reports are written to `~/.aegisai/reports/<scan-id>.{json,html}`:
+Reports are written to `~/.aegisai/reports/<scan-id>.{json,html}`. The easiest
+way to open the HTML one — no path to type, and it defaults to your most recent
+scan:
 
 ```bash
-open ~/.aegisai/reports/<scan-id>.html
+aegisai scan report --format html --open
 ```
 
 Every read command takes `--json`, in either flag position:
@@ -203,6 +205,9 @@ out as `ERROR`. For a demo, prefer the small model and let the library carry it.
 | `LLM unavailable — library only` | Ollama is down. Not fatal; the library still runs. `ollama serve` |
 | Many `ERROR` verdicts | The target's model is timing out, usually resource contention. Use a smaller model or fewer families. |
 | `0 findings` after a clean run | Genuinely possible — small models are non-deterministic. Re-run before concluding anything is fixed. |
+| `file ... does not exist` opening a report | The filename is the **scan** id with its `scan-` prefix, not the target id. Easiest fix: `aegisai scan report --format html --open` |
+| `command not found: aegisai` | The venv is not active in that terminal → `source .venv/bin/activate` |
+| `[Errno 48] address already in use` | A lab is already running on that port → `lsof -i :8001 -sTCP:LISTEN`, then either use it as-is or `pkill -f "uvicorn app:app"` |
 
 ---
 
