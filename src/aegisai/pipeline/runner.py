@@ -21,6 +21,7 @@ from aegisai.models.enums import STAGE_LABELS, ScanStatus, Stage
 from aegisai.models.scan import Scan
 from aegisai.pipeline.attack_chain.stage import AttackChainStage
 from aegisai.pipeline.base import ScanContext, StageResult
+from aegisai.pipeline.closed_loop.stage import ClosedLoopStage
 from aegisai.pipeline.discovery.stage import DiscoveryStage
 from aegisai.pipeline.evidence.stage import EvidenceStage
 from aegisai.pipeline.execution.stage import ExecutionStage
@@ -41,6 +42,7 @@ STAGES: list[Callable[[], object]] = [
     EvidenceStage,
     AttackChainStage,
     RiskStage,
+    ClosedLoopStage,
     ReportingStage,
 ]
 

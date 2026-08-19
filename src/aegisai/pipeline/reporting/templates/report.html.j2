@@ -1,0 +1,301 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AegisAI Report — {{ scan_id }}</title>
+<style>
+  :root{
+    --paper:#F5F6F4; --surface:#FFFFFF; --ink:#171B1A; --muted:#5B625E;
+    --line:#DBDFDB; --accent:#166E68; --accent-tint:#E4EFED;
+    --crit:#B23A2E; --high:#C3702A; --med:#A9852A; --low:#3D6E8C; --good:#2E7D57;
+    --crit-tint:#F7E7E4; --high-tint:#F8EBDE; --med-tint:#F5EFDC; --low-tint:#E4EDF2; --good-tint:#E1EFE6;
+  }
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){
+      --paper:#101413; --surface:#161B1A; --ink:#E9ECEA; --muted:#9AA39D;
+      --line:#2A302E; --accent:#4FB3AA; --accent-tint:#152423;
+      --crit:#E28579; --high:#E3A874; --med:#D3BB78; --low:#8FB4CB; --good:#8BC7A4;
+      --crit-tint:#2A1B18; --high-tint:#2A2117; --med-tint:#282415; --low-tint:#182228; --good-tint:#17251D;
+    }
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--paper);color:var(--ink);
+    font:16px/1.6 ui-serif,Georgia,"Times New Roman",serif;-webkit-font-smoothing:antialiased}
+  .wrap{max-width:1080px;margin:0 auto;padding:2.5rem 1.5rem 5rem}
+  header{border-bottom:1px solid var(--line);padding-bottom:1.6rem;margin-bottom:2rem}
+  .kicker{font:600 .72rem/1 ui-monospace,SFMono-Regular,Menlo,monospace;
+    letter-spacing:.14em;text-transform:uppercase;color:var(--accent);margin-bottom:.7rem}
+  h1{font:700 2.4rem/1.05 ui-sans-serif,system-ui,sans-serif;margin:0 0 .5rem;letter-spacing:-.01em}
+  .meta{display:flex;flex-wrap:wrap;gap:.4rem 1.5rem;
+    font:.78rem/1.5 ui-monospace,SFMono-Regular,Menlo,monospace;color:var(--muted)}
+  .meta b{color:var(--ink);font-weight:600}
+  h2{font:700 1.35rem/1.2 ui-sans-serif,system-ui,sans-serif;margin:2.6rem 0 .9rem;
+    padding-top:1.2rem;border-top:1px solid var(--line)}
+  h2 .num{font:600 .8rem ui-monospace,monospace;color:var(--accent);margin-right:.5rem}
+  h3{font:600 1rem ui-sans-serif,system-ui,sans-serif;margin:1.4rem 0 .5rem}
+  p{margin:.6rem 0;max-width:70ch}
+  .cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:.9rem;margin:1.2rem 0}
+  .card{border:1px solid var(--line);background:var(--surface);border-radius:4px;padding:.9rem 1rem}
+  .card .n{font:700 1.9rem/1 ui-sans-serif,system-ui,sans-serif;display:block}
+  .card .l{font:.68rem ui-monospace,monospace;text-transform:uppercase;
+    letter-spacing:.08em;color:var(--muted)}
+  .tw{overflow-x:auto;border:1px solid var(--line);border-radius:4px;background:var(--surface)}
+  table{border-collapse:collapse;width:100%;font-size:.85rem}
+  th,td{text-align:left;padding:.55rem .75rem;border-bottom:1px solid var(--line);vertical-align:top}
+  th{font:600 .65rem ui-monospace,monospace;text-transform:uppercase;
+    letter-spacing:.07em;color:var(--muted)}
+  tbody tr:last-child td{border-bottom:none}
+  code,.mono{font:.82em ui-monospace,SFMono-Regular,Menlo,monospace}
+  .pill{display:inline-block;font:600 .65rem ui-monospace,monospace;text-transform:uppercase;
+    letter-spacing:.05em;padding:.15rem .5rem;border-radius:99px;white-space:nowrap}
+  .CRITICAL,.REGRESSED{background:var(--crit-tint);color:var(--crit)}
+  .HIGH,.CONFIRMED{background:var(--crit-tint);color:var(--crit)}
+  .MEDIUM,.LIKELY{background:var(--med-tint);color:var(--med)}
+  .LOW,.SUSPECTED{background:var(--low-tint);color:var(--low)}
+  .PASS,.ok{background:var(--good-tint);color:var(--good)}
+  .INCONCLUSIVE{background:var(--med-tint);color:var(--med)}
+  .finding{border:1px solid var(--line);border-left:3px solid var(--muted);background:var(--surface);
+    border-radius:4px;padding:1rem 1.2rem;margin:.9rem 0}
+  .finding.CONFIRMED{border-left-color:var(--crit)}
+  .finding.LIKELY{border-left-color:var(--med)}
+  .finding h4{margin:0 0 .5rem;font:600 1.02rem ui-sans-serif,system-ui,sans-serif}
+  .kv{display:grid;grid-template-columns:max-content 1fr;gap:.25rem 1rem;
+    font-size:.83rem;margin:.6rem 0}
+  .kv dt{color:var(--muted);font:.7rem ui-monospace,monospace;text-transform:uppercase;
+    letter-spacing:.06em}
+  .kv dd{margin:0}
+  pre{background:var(--paper);border:1px solid var(--line);border-radius:3px;
+    padding:.6rem .8rem;overflow-x:auto;font-size:.78rem;margin:.4rem 0;white-space:pre-wrap;
+    word-break:break-word}
+  .ev{font-size:.82rem;margin:.3rem 0;padding-left:1.1rem;position:relative}
+  .ev::before{content:"✓";position:absolute;left:0;color:var(--good)}
+  .ev.weak::before{content:"·";color:var(--muted)}
+  .note{border:1px solid var(--line);border-left:3px solid var(--accent);background:var(--surface);
+    padding:.8rem 1rem;border-radius:3px;font-size:.88rem;margin:1rem 0}
+  .empty{color:var(--muted);font-size:.88rem;font-style:italic}
+  footer{margin-top:3rem;padding-top:1.2rem;border-top:1px solid var(--line);
+    font:.72rem ui-monospace,monospace;color:var(--muted)}
+</style>
+</head>
+<body><div class="wrap">
+
+<header>
+  <div class="kicker">AI Application Security Validation</div>
+  <h1>Scan Report</h1>
+  <div class="meta">
+    <span><b>Scan</b> {{ scan_id }}</span>
+    <span><b>Target</b> {{ target.url }}</span>
+    <span><b>Generated</b> {{ generated_at }}</span>
+  </div>
+</header>
+
+<h2><span class="num">01</span>Executive Summary</h2>
+<div class="cards">
+  <div class="card"><span class="n" style="color:var(--crit)">{{ summary.findings.CONFIRMED }}</span><span class="l">Confirmed</span></div>
+  <div class="card"><span class="n" style="color:var(--med)">{{ summary.findings.LIKELY }}</span><span class="l">Likely</span></div>
+  <div class="card"><span class="n" style="color:var(--muted)">{{ summary.findings.SUSPECTED }}</span><span class="l">Suspected</span></div>
+  <div class="card"><span class="n">{{ summary.probes_sent }}</span><span class="l">Probes sent</span></div>
+  <div class="card"><span class="n">{{ summary.attack_cases }}</span><span class="l">Attack cases</span></div>
+</div>
+<p>
+  {% if summary.findings.CONFIRMED %}
+  This scan confirmed <b>{{ summary.findings.CONFIRMED }}</b> {{ 'vulnerability' if summary.findings.CONFIRMED == 1 else 'vulnerabilities' }}
+  against {{ target.url }}. A confirmed finding is backed by deterministic evidence — a retrieved
+  canary, a violated policy boundary, or sensitive data returned — not by a model's opinion of its
+  own output.
+  {% else %}
+  No finding reached CONFIRMED. Suspected findings below are signals without deterministic proof and
+  should be read as leads, not vulnerabilities.
+  {% endif %}
+</p>
+
+<h2><span class="num">02</span>Target Profile</h2>
+<div class="tw"><table>
+  <thead><tr><th>Method</th><th>Path</th><th>Text key</th><th>Confidence</th><th>Chat surface</th></tr></thead>
+  <tbody>
+  {% for e in target_profile.endpoints %}
+    <tr>
+      <td class="mono">{{ e.method }}</td><td class="mono">{{ e.path }}</td>
+      <td class="mono">{{ e.text_key or '—' }}</td>
+      <td class="mono">{{ e.text_key_confidence or e.confidence }}</td>
+      <td>{% if e.is_chat_surface %}<span class="pill ok">yes</span>{% endif %}</td>
+    </tr>
+  {% else %}<tr><td colspan="5" class="empty">No endpoints discovered.</td></tr>{% endfor %}
+  </tbody>
+</table></div>
+<p class="empty">Every discovered fact is labelled with how it was established. INFERRED means AegisAI
+assumed a conventional default because the target published no schema — it was not observed.</p>
+
+<h2><span class="num">03</span>Attack Surface Graph</h2>
+{% if attack_chains %}
+<p>{{ attack_chains|length }} correlated exploit path{{ '' if attack_chains|length == 1 else 's' }} — see section 11.</p>
+{% else %}<p class="empty">No graph produced.</p>{% endif %}
+
+<h2><span class="num">04</span>Attack Test Cases</h2>
+<div class="tw"><table>
+  <thead><tr><th>ID</th><th>OWASP</th><th>Category</th><th>Objective</th><th>Origin</th></tr></thead>
+  <tbody>
+  {% for c in attack_cases %}
+    <tr><td class="mono">{{ c.id }}</td><td class="mono">{{ c.owasp_tag }}</td>
+        <td>{{ c.category }}</td><td>{{ c.intent }}</td>
+        <td class="mono">{{ c.origin | default('library') }}</td></tr>
+  {% else %}<tr><td colspan="5" class="empty">None.</td></tr>{% endfor %}
+  </tbody>
+</table></div>
+
+<h2><span class="num">05</span>Security-Control Results</h2>
+<div class="cards">
+{% for verdict, count in summary.control_results.items() %}
+  <div class="card"><span class="n">{{ count }}</span><span class="l">{{ verdict.replace('_',' ') }}</span></div>
+{% endfor %}
+</div>
+
+<h2><span class="num">06</span>Accepted / Rejected / Refused</h2>
+<p>AegisAI never blocks its own probes. These are the target's own decisions.
+<b>Rejected</b> means a control stopped the probe; <b>refused</b> means it reached the model, which
+declined; <b>accepted</b> means nothing stopped it.</p>
+<div class="tw"><table>
+  <thead><tr><th>Verdict</th><th>Reason</th><th>Status</th><th>Latency</th></tr></thead>
+  <tbody>
+  {% for r in control_results[:15] %}
+    <tr><td><span class="pill {{ 'PASS' if 'REJECTED' in r.verdict else 'LOW' }}">{{ r.verdict.replace('_BY_TARGET','').replace('_CONTROL','') }}</span></td>
+        <td>{{ r.reason }}</td><td class="mono">{{ r.status_code or '—' }}</td>
+        <td class="mono">{{ r.latency_ms or '—' }}ms</td></tr>
+  {% endfor %}
+  </tbody>
+</table></div>
+{% if control_results|length > 15 %}<p class="empty">Showing 15 of {{ control_results|length }}.</p>{% endif %}
+
+<h2><span class="num">07</span>Guardrail Evasion Results</h2>
+{% set g = guardrail_evasion %}
+<div class="cards">
+  <div class="card"><span class="n">{{ (g.guardrail_evasion_rate * 100) | round(1) }}%</span><span class="l">Evasion rate</span></div>
+  <div class="card"><span class="n">{{ g.base_rejected_cases }}</span><span class="l">Base rejected</span></div>
+  <div class="card"><span class="n">{{ (g.refusal_after_acceptance_rate * 100) | round(1) }}%</span><span class="l">Refused after accept</span></div>
+</div>
+{% if g.base_rejected_cases == 0 %}
+<div class="note">The target rejected no base-case probe, so there was no input control to evade and the
+evasion rate is reported as zero. That is a materially different result from a control holding firm —
+it means no such control was observed at all.</div>
+{% endif %}
+<div class="tw"><table>
+  <thead><tr><th>Family</th><th>Variants</th><th>Accepted</th><th>Refused</th><th>Acceptance rate</th></tr></thead>
+  <tbody>
+  {% for f in g.per_family %}
+    <tr><td class="mono">{{ f.family }}</td><td>{{ f.total }}</td><td>{{ f.accepted }}</td>
+        <td>{{ f.refused }}</td><td>{{ (f.acceptance_rate * 100) | round(1) }}%</td></tr>
+  {% else %}<tr><td colspan="5" class="empty">No evasion variants generated.</td></tr>{% endfor %}
+  </tbody>
+</table></div>
+
+<h2><span class="num">08</span>Runtime Behaviour</h2>
+{% if runtime_events %}
+<div class="tw"><table>
+  <thead><tr><th>Type</th><th>Count</th></tr></thead>
+  <tbody>{% for t, n in runtime_events.items() %}<tr><td class="mono">{{ t }}</td><td>{{ n }}</td></tr>{% endfor %}</tbody>
+</table></div>
+{% else %}<p class="empty">The target exposed no runtime telemetry, so behavioural checks were limited
+to what the responses themselves revealed.</p>{% endif %}
+
+<h2><span class="num">09</span>Expected vs Observed</h2>
+{% if violations %}
+<div class="tw"><table>
+  <thead><tr><th>Boundary</th><th>Rule</th><th>Expected</th><th>Observed</th></tr></thead>
+  <tbody>
+  {% for v in violations %}
+    <tr><td class="mono">{{ v.boundary }}</td><td class="mono">{{ v.rule }}</td>
+        <td>{{ v.expected }}</td><td>{{ v.observed }}</td></tr>
+  {% endfor %}
+  </tbody>
+</table></div>
+{% else %}<p class="empty">No policy violations, or no contract was defined for this target type.</p>{% endif %}
+
+<h2><span class="num">10</span>Evidence &amp; Findings</h2>
+{% for f in findings %}
+<div class="finding {{ f.verdict }}">
+  <h4>{{ f.title }} <span class="pill {{ f.verdict }}">{{ f.verdict }}</span></h4>
+  <dl class="kv">
+    <dt>OWASP</dt><dd>{{ f.owasp_tag or '—' }}{% if f.owasp_name %} — {{ f.owasp_name }}{% endif %}</dd>
+    <dt>Confidence</dt><dd>{{ f.confidence }}</dd>
+    {% if f.risk %}<dt>Risk</dt><dd><span class="pill {{ f.risk.risk_level }}">{{ f.risk.risk_level }}</span> {{ f.risk.score }}/10</dd>{% endif %}
+  </dl>
+  {% if f.attack_payload %}<pre>{{ f.attack_payload[:400] }}</pre>{% endif %}
+  {% for e in f.evidence %}
+    <div class="ev {{ '' if e.deterministic else 'weak' }}">
+      <b class="mono">{{ e.evidence_type }}</b>{% if not e.deterministic %} <span class="empty">(supporting only)</span>{% endif %} — {{ e.summary }}
+    </div>
+  {% endfor %}
+  {% if f.mitigation %}<p><b>Mitigation.</b> {{ f.mitigation }}</p>{% endif %}
+</div>
+{% else %}<p class="empty">No findings.</p>{% endfor %}
+
+<h2><span class="num">11</span>Attack Chains</h2>
+{% for c in attack_chains %}
+<div class="finding">
+  <h4>{{ c.title }}</h4>
+  <dl class="kv">
+    <dt>Severity</dt><dd>{{ c.severity }}</dd>
+    <dt>OWASP</dt><dd>{{ c.owasp_tags | join(', ') or '—' }}</dd>
+    <dt>Findings</dt><dd>{{ c.finding_ids | length }}</dd>
+  </dl>
+</div>
+{% else %}<p class="empty">No chains built.</p>{% endfor %}
+
+<h2><span class="num">12</span>OWASP Mapping</h2>
+<div class="tw"><table>
+  <thead><tr><th>Category</th><th>Name</th><th>Findings</th></tr></thead>
+  <tbody>
+  {% for tag, info in owasp_mapping.items() %}
+    <tr><td class="mono">{{ tag }}</td><td>{{ info.name }}</td><td>{{ info.count }}</td></tr>
+  {% else %}<tr><td colspan="3" class="empty">Nothing mapped.</td></tr>{% endfor %}
+  </tbody>
+</table></div>
+<p class="empty">A category is attached only where the evidence supports it. Findings that fit no
+category are left unmapped rather than forced into one.</p>
+
+<h2><span class="num">13</span>Risk Scores</h2>
+<div class="tw"><table>
+  <thead><tr><th>Finding</th><th>Level</th><th>Score</th><th>Basis</th></tr></thead>
+  <tbody>
+  {% for r in risk_scores %}
+    <tr><td class="mono">{{ r.finding_id }}</td>
+        <td><span class="pill {{ r.risk_level }}">{{ r.risk_level }}</span></td>
+        <td class="mono">{{ r.score }}/10</td><td class="empty">{{ r.explanation }}</td></tr>
+  {% else %}<tr><td colspan="4" class="empty">No scores.</td></tr>{% endfor %}
+  </tbody>
+</table></div>
+
+<h2><span class="num">14</span>Confirmed vs Suspected</h2>
+<p>A finding is <b>CONFIRMED</b> only with deterministic evidence. Response text alone can never
+exceed <b>SUSPECTED</b>, however convincing it reads — that cap is enforced in code, not by
+convention.</p>
+
+<h2><span class="num">15</span>Mitigation</h2>
+<ul>
+{% for m in mitigations %}<li>{{ m }}</li>{% else %}<li class="empty">No mitigations required.</li>{% endfor %}
+</ul>
+
+<h2><span class="num">16</span>Regression Test Status</h2>
+{% if regression_tests %}
+<div class="tw"><table>
+  <thead><tr><th>Test</th><th>Status</th><th>OWASP</th><th>Transformation</th><th>Attempts</th></tr></thead>
+  <tbody>
+  {% for t in regression_tests %}
+    <tr><td class="mono">{{ t.id }}</td>
+        <td><span class="pill {{ 'PASS' if t.status == 'RESOLVED' else 'REGRESSED' if t.status == 'REGRESSED' else 'LOW' }}">{{ t.status }}</span></td>
+        <td class="mono">{{ t.owasp_tag or '—' }}</td><td class="mono">{{ t.transformation }}</td>
+        <td class="mono">{{ t.attempt_count }}/{{ t.max_attempts }}</td></tr>
+  {% endfor %}
+  </tbody>
+</table></div>
+<p class="empty">Each stored test holds the exact payload that produced its finding, and is replayed
+on every future scan of this target.</p>
+{% else %}<p class="empty">No regression tests stored — none of this scan's findings reached CONFIRMED.</p>{% endif %}
+
+<footer>
+  AegisAI {{ version }} · scan {{ scan_id }} · {{ generated_at }}<br>
+  Authorized security testing only. All canaries and test data are synthetic.
+</footer>
+
+</div></body></html>

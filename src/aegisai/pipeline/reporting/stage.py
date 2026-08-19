@@ -17,8 +17,12 @@ from aegisai.models.attack import AttackCase, AttackVariant
 from aegisai.models.enums import FindingVerdict, Stage
 from aegisai.models.execution import ControlEvaluation
 from aegisai.models.finding import Evidence, Finding
+from aegisai.models.policy import Violation
+from aegisai.models.regression import RegressionTest
+from aegisai.models.runtime import RuntimeEvent
 from aegisai.pipeline.base import ScanContext, StageResult
 from aegisai.pipeline.orchestrator import metrics as evasion_metrics
+from aegisai.pipeline.reporting import html as html_report
 
 MAX_BODY_EXCERPT = 2000
 """Responses are truncated in the report; the full body stays in the database."""
@@ -93,6 +97,35 @@ def build_payload(ctx: ScanContext) -> dict:
             }
             for e in evaluations
         ],
+        "runtime_event_types": [
+            e.event_type
+            for e in session.scalars(
+                select(RuntimeEvent).where(RuntimeEvent.scan_id == ctx.scan_id)
+            )
+        ],
+        "violations": [
+            {
+                "boundary": v.boundary,
+                "rule": v.rule,
+                "expected": v.expected,
+                "observed": v.observed,
+                "severity": (v.detail or {}).get("severity"),
+            }
+            for v in session.scalars(select(Violation).where(Violation.scan_id == ctx.scan_id))
+        ],
+        "regression_tests": [
+            {
+                "id": t.id,
+                "status": t.status,
+                "owasp_tag": t.owasp_tag,
+                "transformation": t.transformation,
+                "attempt_count": t.attempt_count,
+                "max_attempts": t.max_attempts,
+            }
+            for t in session.scalars(
+                select(RegressionTest).where(RegressionTest.target_id == ctx.target_id)
+            )
+        ],
         "attack_chains": [
             {
                 "chain_id": c.id,
@@ -156,13 +189,21 @@ class ReportingStage:
         path.write_text(json.dumps(payload, indent=2, default=str), encoding="utf-8")
 
         ctx.session.add(
+            Report(scan_id=ctx.scan_id, format="json", path=str(path), summary=payload["summary"])
+        )
+
+        html_path = reports_dir / f"{ctx.scan_id}.html"
+        html_report.write(payload, html_path)
+        ctx.session.add(
             Report(
                 scan_id=ctx.scan_id,
-                format="json",
-                path=str(path),
+                format="html",
+                path=str(html_path),
                 summary=payload["summary"],
             )
         )
         ctx.session.flush()
 
-        return StageResult(ok=True, summary=f"wrote {path}", counts={"reports": 1})
+        return StageResult(
+            ok=True, summary=f"wrote {path.name} and {html_path.name}", counts={"reports": 2}
+        )
