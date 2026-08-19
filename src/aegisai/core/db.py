@@ -1,0 +1,60 @@
+"""Database engine and session management."""
+
+from __future__ import annotations
+
+from collections.abc import Iterator
+from contextlib import contextmanager
+from pathlib import Path
+
+from sqlalchemy import Engine, create_engine, event
+from sqlalchemy.orm import Session, sessionmaker
+
+from aegisai.core.config import Config
+
+
+def _ensure_sqlite_parent(url: str) -> None:
+    if url.startswith("sqlite:///"):
+        path = Path(url.removeprefix("sqlite:///")).expanduser()
+        path.parent.mkdir(parents=True, exist_ok=True)
+
+
+def create_db_engine(cfg: Config) -> Engine:
+    url = cfg.core.database_url
+    if url.startswith("sqlite:///"):
+        expanded = str(Path(url.removeprefix("sqlite:///")).expanduser())
+        url = f"sqlite:///{expanded}"
+    _ensure_sqlite_parent(url)
+
+    engine = create_engine(url, future=True)
+
+    if url.startswith("sqlite"):
+
+        @event.listens_for(engine, "connect")
+        def _sqlite_pragmas(dbapi_conn, _record):  # type: ignore[no-untyped-def]
+            cursor = dbapi_conn.cursor()
+            # WAL keeps a long-running scan's writes from blocking concurrent reads
+            # (`scan status` polling while `scan run` works).
+            cursor.execute("PRAGMA journal_mode=WAL")
+            cursor.execute("PRAGMA foreign_keys=ON")
+            cursor.close()
+
+    return engine
+
+
+def session_factory(engine: Engine) -> sessionmaker[Session]:
+    return sessionmaker(bind=engine, expire_on_commit=False, future=True)
+
+
+@contextmanager
+def session_scope(engine: Engine) -> Iterator[Session]:
+    """Transactional session: commits on success, rolls back on error."""
+    factory = session_factory(engine)
+    session = factory()
+    try:
+        yield session
+        session.commit()
+    except Exception:
+        session.rollback()
+        raise
+    finally:
+        session.close()

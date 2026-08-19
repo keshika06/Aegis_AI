@@ -1,0 +1,23 @@
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.venv/
+venv/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+*.db
+*.sqlite
+*.sqlite3
+
+reports/
+runtime/
+.env
+.DS_Store
+node_modules/
+
+# Transient agent/editor state (project-level .claude config can still be committed)
+.claude/scheduled_tasks.lock
