@@ -1,6 +1,8 @@
 import { useState } from 'react'
 import { ShieldOff, ShieldCheck, Circle, ChevronRight, Zap } from 'lucide-react'
 import { PageHeader, Panel } from '../components/Panel'
+import AttackFlowGraph from '../components/AttackFlowGraph'
+import DefenceLayers from '../components/DefenceLayers'
 import { attackChains, attackTimeline } from '../data/scanData'
 
 const STATUS = {
@@ -60,6 +62,7 @@ function Phase({ phase, isLast }) {
 
 export default function AttackChain() {
   const [selected, setSelected] = useState(0)
+  const [focusPhase, setFocusPhase] = useState(null)
   const chain = attackChains[selected]
 
   if (!chain) {
@@ -101,6 +104,32 @@ export default function AttackChain() {
       )}
 
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-5 mb-5">
+        <Panel title="Attack path" className="xl:col-span-2">
+          <AttackFlowGraph
+            phases={chain.phases}
+            selected={focusPhase}
+            onSelect={(n) => {
+              setFocusPhase(n)
+              document.getElementById(`phase-${n}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+            }}
+          />
+          <div className="flex items-center gap-4 mt-3 pt-3 border-t border-base-border flex-wrap text-[11px]">
+            <span className="flex items-center gap-1.5 text-slate-400">
+              <span className="w-3 h-0.5 bg-sev-critical inline-block" /> attack still travelling
+            </span>
+            <span className="flex items-center gap-1.5 text-slate-400">
+              <span className="w-3 h-0.5 inline-block" style={{ background: '#3f4a63' }} /> stopped here
+            </span>
+            <span className="text-slate-500 ml-auto">click any phase to jump to its detail</span>
+          </div>
+        </Panel>
+
+        <Panel title="Defence layers">
+          <DefenceLayers phases={chain.phases} />
+        </Panel>
+      </div>
+
+      <div className="grid grid-cols-1 xl:grid-cols-3 gap-5 mb-5">
         <Panel title="Attack sequence" className="xl:col-span-2">
           <div className="mb-5 p-3 rounded-lg border border-base-border bg-base-card2">
             <div className="text-[13px] font-bold text-slate-100 mb-0.5">{chain.findingTitle}</div>
@@ -114,7 +143,9 @@ export default function AttackChain() {
 
           <div>
             {chain.phases.map((p, i) => (
-              <Phase key={p.n} phase={p} isLast={i === chain.phases.length - 1} />
+              <div key={p.n} id={`phase-${p.n}`}>
+                <Phase phase={p} isLast={i === chain.phases.length - 1} />
+              </div>
             ))}
           </div>
         </Panel>
