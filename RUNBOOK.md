@@ -141,19 +141,40 @@ aegisai findings list <scan-id> --verdict CONFIRMED --json | jq '.[0].evidence'
 The scan writes an HTML report, but the React dashboard is the richer view — the
 attack-path graph, defence layers, and the evidence explorer.
 
-```bash
-aegisai dashboard serve
-```
-
-That exports your most recent scan, installs frontend dependencies on first run,
-and opens a dev server on http://localhost:5173.
-
-To refresh it after a later scan without restarting the server:
+`aegisai scan run` already exports its results into the dashboard, so the data
+is waiting for you:
 
 ```bash
-aegisai dashboard export          # newest scan
-aegisai dashboard export <scan-id>  # a specific one
+aegisai dashboard serve <scan-id>
 ```
+
+That installs frontend dependencies on first run and starts a dev server. **Watch
+the Vite line for the real port** — if 5173 is taken it silently falls back to
+5174, and the line AegisAI prints above it is the port it *asked* for:
+
+```
+  Dashboard  http://localhost:5173     <- requested
+  ➜  Local:  http://localhost:5174/    <- actual, use this one
+```
+
+Pass the scan id. Bare `dashboard serve` resolves to the most recent scan, which
+is not necessarily the one you just ran.
+
+To refresh without restarting the server:
+
+```bash
+aegisai dashboard export             # newest scan
+aegisai dashboard export <scan-id>   # a specific one
+```
+
+The dashboard is a static build that reads `frontend/src/data/scanData.json`, so
+it shows whatever was exported last. The top bar names the scan id it is
+displaying, and shows an orange **stale** badge when a newer scan exists in the
+database — a dashboard showing real numbers from the wrong run otherwise looks
+exactly like one showing the right run.
+
+Note that `export` overwrites a git-tracked file, so `git status` will show
+`frontend/src/data/scanData.json` as modified after any scan. That is expected.
 
 Requires Node.js. Without it, the HTML report covers the same findings.
 
