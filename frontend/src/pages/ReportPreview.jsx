@@ -2,7 +2,8 @@ import { useRef } from 'react'
 import { Download, FileJson, Printer } from 'lucide-react'
 import {
   run, findings, owaspCategories, riskComponents, factorContributions, contributionFinal,
-  attackChainNodes, evidenceItems, dataSource, controlResults, regression, severityColor
+  attackChainNodes, evidenceItems, dataSource, controlResults, regression, severityColor,
+  chainSummary, recommendedActions
 } from '../data/scanData'
 
 function sevPill(sev) {
@@ -90,17 +91,22 @@ export default function ReportPreview() {
           {/* Executive Summary */}
           <Section title="1 · Executive Summary">
             <div className="grid grid-cols-4 gap-4">
-              <Stat label="Overall Risk" value="HIGH" color="#dc2626" />
+              <Stat label="Overall Risk" value={run.severity} color="#dc2626" />
               <Stat label="Risk Score" value={`${run.risk}/100`} />
               <Stat label="Critical Findings" value={run.critical} color="#dc2626" />
               <Stat label="OWASP Categories" value={`${run.owaspAffected}/${run.owaspTotal}`} />
             </div>
             <p className="text-sm text-[#3a4152] leading-relaxed mt-4">
-              The validation of {run.target} identified {run.totalFindings} findings across {run.owaspAffected} OWASP LLM Top 10
-              categories, resulting in an overall risk score of {run.risk}/100 ({run.severity}), an increase of{' '}
-              {run.risk - run.previousRisk} points from the previous validation run ({run.previousRisk}). The most significant
-              exposure was an indirect prompt injection that bypassed the prompt guardrail and reached a privileged tool
-              invocation.
+              The validation of {run.target} identified {run.totalFindings} finding{run.totalFindings === 1 ? '' : 's'} across{' '}
+              {run.owaspAffected} OWASP LLM Top 10 categor{run.owaspAffected === 1 ? 'y' : 'ies'}, of which{' '}
+              {run.confirmed} {run.confirmed === 1 ? 'was' : 'were'} confirmed by deterministic evidence. The overall risk
+              score is {run.risk}/100 ({run.severity})
+              {run.previousRisk !== null && run.previousRisk !== undefined
+                ? `, ${run.risk - run.previousRisk >= 0 ? 'up' : 'down'} ${Math.abs(run.risk - run.previousRisk)} points from the previous run (${run.previousRisk})`
+                : ' (first recorded run for this target)'}.
+              {chainSummary.title
+                ? ` The most significant exposure was "${chainSummary.title}", which breached ${chainSummary.breachedLayers} of ${chainSummary.totalLayers} defence layers.`
+                : ''}
             </p>
           </Section>
 
@@ -123,7 +129,7 @@ export default function ReportPreview() {
             <div className="grid grid-cols-2 gap-8 items-center">
               <div className="text-center">
                 <div className="text-6xl font-extrabold" style={{ color: '#dc2626' }}>{run.risk}</div>
-                <div className="text-sm text-[#5a6478]">out of 100 · HIGH RISK</div>
+                <div className="text-sm text-[#5a6478]">out of 100 · {run.severity} RISK</div>
               </div>
               <div className="space-y-2">
                 {riskComponents.map((c) => (
@@ -184,7 +190,7 @@ export default function ReportPreview() {
                 </span>
               ))}
             </div>
-            <div className="text-sm mt-3">Attack Chain Risk: <span className="font-bold" style={{ color: '#dc2626' }}>86/100</span> · Highest Risk Node: <span className="font-bold">Tool Invocation</span></div>
+            <div className="text-sm mt-3">Attack Chain Risk: <span className="font-bold" style={{ color: '#dc2626' }}>{chainSummary.risk}/100</span> · Furthest phase reached: <span className="font-bold">{chainSummary.worstPhaseName ?? '—'}</span></div>
           </Section>
 
           {/* Evidence */}
@@ -233,10 +239,10 @@ export default function ReportPreview() {
           {/* Recommendations */}
           <Section title="12 · Recommendations">
             <ol className="list-decimal list-inside text-sm space-y-1 text-[#3a4152]">
-              <li>Strengthen contextual input isolation and enforce instruction hierarchy for RAG-sourced content.</li>
-              <li>Reduce tool authorization scope for the agent runtime; require step-up approval for sensitive actions.</li>
-              <li>Harden the prompt guardrail against Unicode / encoding-based obfuscation.</li>
-              <li>Add output-side PII detection prior to summarization responses.</li>
+              {recommendedActions.map((a) => <li key={a}>{a}</li>)}
+              {recommendedActions.length === 0 && (
+                <li>No remediation required — no finding reached CONFIRMED.</li>
+              )}
             </ol>
           </Section>
 

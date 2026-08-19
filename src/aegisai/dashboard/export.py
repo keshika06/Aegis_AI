@@ -152,6 +152,19 @@ def build(session: Session, scan_id: str) -> dict[str, Any]:
             events,
         ),
         "attackTimeline": _timeline(events, variants),
+        "chainSummary": _chain_summary(
+            _chains(
+                chains,
+                findings,
+                risks,
+                variants,
+                cases,
+                {e.id: e for e in evaluations},
+                evidence_by_finding,
+                violations,
+                events,
+            )
+        ),
         "riskComponents": _risk_components(risks),
         "factorContributions": _contributions(risks),
         "evidenceItems": _evidence(
@@ -638,6 +651,43 @@ def _chains(
             }
         )
     return out
+
+
+def _chain_summary(built_chains) -> dict:
+    """Headline numbers for the worst chain.
+
+    Pages previously hardcoded "86/100" and "Tool Invocation" here, which was
+    invented — this derives both from the chain that actually scored highest.
+    """
+    if not built_chains:
+        return {
+            "risk": 0,
+            "riskLevel": "LOW",
+            "chains": 0,
+            "worstPhase": None,
+            "worstPhaseName": None,
+            "breachedLayers": 0,
+            "totalLayers": 4,
+        }
+
+    top = built_chains[0]
+    # The last phase a defence failed at is how far the attack actually got.
+    failed = [p for p in top["phases"] if p["status"] == "failed"]
+    worst = failed[-1] if failed else None
+    defence_phases = {3, 4, 5, 6}
+    breached = sum(1 for p in top["phases"] if p["n"] in defence_phases and p["status"] == "failed")
+
+    return {
+        "risk": top["risk"],
+        "riskLevel": top["riskLevel"],
+        "chains": len(built_chains),
+        "worstPhase": worst["n"] if worst else None,
+        "worstPhaseName": worst["name"] if worst else None,
+        "worstPhaseHeadline": worst["headline"] if worst else None,
+        "breachedLayers": breached,
+        "totalLayers": len(defence_phases),
+        "title": top["findingTitle"],
+    }
 
 
 def _chain_nodes(chains, findings, risks) -> list[dict]:

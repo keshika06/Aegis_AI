@@ -4,7 +4,7 @@ import { PageHeader, Panel } from '../components/Panel'
 import KpiCard from '../components/KpiCard'
 import SeverityBadge from '../components/SeverityBadge'
 import RiskGauge from '../components/RiskGauge'
-import { run, findings, owaspCategories, recommendedActions } from '../data/scanData'
+import { run, findings, owaspCategories, recommendedActions, chainSummary } from '../data/scanData'
 
 export default function Overview() {
   const topRisks = [...findings].sort((a, b) => b.risk - a.risk).slice(0, 5)
@@ -95,7 +95,7 @@ export default function Overview() {
           </div>
           <div className="mt-4 pt-3 border-t border-base-border flex items-center justify-between">
             <span className="text-xs text-slate-500">Chain Risk</span>
-            <span className="text-lg font-bold text-sev-critical">86/100</span>
+            <span className="text-lg font-bold text-sev-critical">{chainSummary.risk}/100</span>
           </div>
         </Panel>
       </div>

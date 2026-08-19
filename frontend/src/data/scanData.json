@@ -1,6 +1,6 @@
 {
   "meta": {
-    "generated_at": "2026-08-19T14:36:02",
+    "generated_at": "2026-08-19T18:58:54",
     "source": "aegisai",
     "scan_id": "scan-d3edff0fa7a9"
   },
@@ -1404,6 +1404,17 @@
       "critical": false
     }
   ],
+  "chainSummary": {
+    "risk": 93,
+    "riskLevel": "CRITICAL",
+    "chains": 6,
+    "worstPhase": 8,
+    "worstPhaseName": "Outcome",
+    "worstPhaseHeadline": "CONFIRMED \u00b7 CRITICAL 9.3/10",
+    "breachedLayers": 3,
+    "totalLayers": 4,
+    "title": "Sensitive Disclosure \u2014 extract confidential token"
+  },
   "riskComponents": [
     {
       "label": "Exploitability",

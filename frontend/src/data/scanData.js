@@ -23,6 +23,8 @@ export const attackChainNodes = scan.attackChainNodes ?? []
 // what each defence did, and what proves the outcome.
 export const attackChains = scan.attackChains ?? []
 export const attackTimeline = scan.attackTimeline ?? []
+// Headline numbers for the worst chain, so pages never hardcode one.
+export const chainSummary = scan.chainSummary ?? {}
 export const riskComponents = scan.riskComponents ?? []
 export const evidenceItems = scan.evidenceItems ?? []
 export const outcomeDistribution = scan.outcomeDistribution ?? []

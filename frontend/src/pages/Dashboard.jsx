@@ -5,7 +5,7 @@ import { PageHeader, Panel, Bar } from '../components/Panel'
 import KpiCard from '../components/KpiCard'
 import RiskGauge from '../components/RiskGauge'
 import SeverityBadge from '../components/SeverityBadge'
-import { run, riskRuns, owaspCategories, findings, riskComponents, severityColor } from '../data/scanData'
+import { run, riskRuns, owaspCategories, findings, riskComponents, severityColor, chainSummary } from '../data/scanData'
 
 const donutData = [
   { name: 'Critical', value: run.critical, color: severityColor.CRITICAL.text },
@@ -156,11 +156,11 @@ export default function Dashboard() {
         <div className="flex items-center gap-8 mt-4 pt-3 border-t border-base-border">
           <div>
             <div className="text-[11px] text-slate-500">Attack Chain Risk</div>
-            <div className="text-xl font-bold text-sev-critical">86/100</div>
+            <div className="text-xl font-bold text-sev-critical">{chainSummary.risk}/100</div>
           </div>
           <div>
             <div className="text-[11px] text-slate-500">Highest Risk Node</div>
-            <div className="text-sm font-semibold text-slate-200">Tool Invocation</div>
+            <div className="text-sm font-semibold text-slate-200">{chainSummary.worstPhaseName ?? "—"}</div>
           </div>
         </div>
       </Panel>
