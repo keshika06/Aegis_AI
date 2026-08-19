@@ -12,7 +12,7 @@ from pathlib import Path
 
 from sqlalchemy import select
 
-from aegisai.models.analysis import Report
+from aegisai.models.analysis import AttackChain, Report, RiskScore
 from aegisai.models.attack import AttackCase, AttackVariant
 from aegisai.models.enums import FindingVerdict, Stage
 from aegisai.models.execution import ControlEvaluation
@@ -92,6 +92,28 @@ def build_payload(ctx: ScanContext) -> dict:
                 "error": e.error,
             }
             for e in evaluations
+        ],
+        "attack_chains": [
+            {
+                "chain_id": c.id,
+                "title": c.title,
+                "finding_ids": c.finding_ids,
+                "owasp_tags": c.owasp_tags,
+                "severity": c.severity,
+                "graph": c.graph,
+            }
+            for c in session.scalars(select(AttackChain).where(AttackChain.scan_id == ctx.scan_id))
+        ],
+        "risk_scores": [
+            {
+                "finding_id": r.finding_id,
+                "score": r.score,
+                "risk_level": r.risk_level,
+                "factors": r.factors,
+                "weights": r.weights,
+                "explanation": r.explanation,
+            }
+            for r in session.scalars(select(RiskScore).where(RiskScore.scan_id == ctx.scan_id))
         ],
         "findings": [
             {

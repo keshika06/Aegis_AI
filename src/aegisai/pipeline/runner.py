@@ -19,6 +19,7 @@ from aegisai.core.config import Config
 from aegisai.models.base import utcnow
 from aegisai.models.enums import STAGE_LABELS, ScanStatus, Stage
 from aegisai.models.scan import Scan
+from aegisai.pipeline.attack_chain.stage import AttackChainStage
 from aegisai.pipeline.base import ScanContext, StageResult
 from aegisai.pipeline.discovery.stage import DiscoveryStage
 from aegisai.pipeline.evidence.stage import EvidenceStage
@@ -28,6 +29,7 @@ from aegisai.pipeline.observability.stage import ObservabilityStage
 from aegisai.pipeline.orchestrator.stage import EvasionStage
 from aegisai.pipeline.planner.stage import PlannerStage
 from aegisai.pipeline.reporting.stage import ReportingStage
+from aegisai.pipeline.risk.stage import RiskStage
 
 STAGES: list[Callable[[], object]] = [
     DiscoveryStage,
@@ -37,6 +39,8 @@ STAGES: list[Callable[[], object]] = [
     ObservabilityStage,
     ExpectedObservedStage,
     EvidenceStage,
+    AttackChainStage,
+    RiskStage,
     ReportingStage,
 ]
 

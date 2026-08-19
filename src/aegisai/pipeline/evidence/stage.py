@@ -28,6 +28,7 @@ from aegisai.models.finding import Evidence, Finding
 from aegisai.models.policy import Violation
 from aegisai.pipeline.base import ScanContext, StageResult
 from aegisai.pipeline.evidence.canary import find_canaries
+from aegisai.pipeline.evidence.pii import detect as detect_pii
 
 EVIDENCE_WEIGHTS = {
     EvidenceType.CANARY: 1.0,
@@ -174,6 +175,22 @@ class EvidenceStage:
                     EvidenceType.CANARY,
                     f"Synthetic canary {canaries[0]} was returned in the response",
                     {"canaries": canaries, "match_count": len(canaries)},
+                )
+            )
+
+        if pii := detect_pii(body):
+            signals.append(
+                Signal(
+                    EvidenceType.PII_DETECTION,
+                    f"Sensitive data returned: {', '.join(sorted({m.entity_type for m in pii}))}",
+                    {
+                        # Redacted only: recording the raw value would recreate
+                        # the exposure inside the report.
+                        "entities": [
+                            {"type": m.entity_type, "redacted": m.redacted, "detector": m.detector}
+                            for m in pii
+                        ]
+                    },
                 )
             )
 
