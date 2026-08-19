@@ -13,6 +13,13 @@ import scan from './scanData.json'
 export const dataSource = scan.meta ?? { source: 'unknown', generated_at: null, scan_id: null }
 export const isLiveData = dataSource.source === 'aegisai'
 
+// True when a newer scan exists in the database than the one exported here.
+// The file is static, so this is the export-time answer - which is exactly the
+// question a reader has: "am I looking at the scan I just ran?"
+export const isStale =
+  Boolean(dataSource.latest_scan_id) && dataSource.latest_scan_id !== dataSource.scan_id
+export const latestScanId = dataSource.latest_scan_id ?? null
+
 export const run = scan.run
 export const riskRuns = scan.riskRuns ?? []
 export const owaspCategories = scan.owaspCategories ?? []

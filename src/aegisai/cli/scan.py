@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json as jsonlib
+import os
 
 import typer
 from sqlalchemy import select
@@ -22,6 +23,34 @@ from aegisai.models.target import Target
 from aegisai.pipeline.runner import TOTAL_PIPELINE_STAGES, run_pipeline
 
 app = typer.Typer(help="Run security scans and inspect their results.")
+
+
+def _export_to_dashboard(session, scan_id: str) -> str | None:
+    """Write the scan into the dashboard's data file. Never fatal.
+
+    A scan that succeeded must not be reported as failed because the frontend
+    is absent or unwritable, so every failure here degrades to None and the
+    summary simply omits the dashboard line.
+
+    Skipped under pytest. The data file lives in the working tree, and a test
+    running a scan against a mock target would otherwise overwrite the real
+    dashboard with a fixture run - a passing test suite that silently destroys
+    the developer's data is worse than no auto-export at all.
+    """
+    if os.environ.get("PYTEST_CURRENT_TEST"):
+        return None
+    try:
+        from aegisai.cli.dashboard import DATA_FILE
+        from aegisai.dashboard.export import build
+
+        if not DATA_FILE.parent.parent.parent.exists():  # frontend/ not present
+            return None
+        data = build(session, scan_id)
+        DATA_FILE.parent.mkdir(parents=True, exist_ok=True)
+        DATA_FILE.write_text(jsonlib.dumps(data, indent=2, default=str), encoding="utf-8")
+        return str(DATA_FILE)
+    except Exception:  # noqa: BLE001 - a reporting convenience never fails a scan
+        return None
 
 
 @app.command("run")
@@ -98,6 +127,11 @@ def run_scan(
             counts[finding.verdict] = counts.get(finding.verdict, 0) + 1
         json_path = str(app_ctx.config.reports_dir / f"{scan_id}.json")
         html_path = str(app_ctx.config.reports_dir / f"{scan_id}.html")
+        # Push this scan into the dashboard's data file straight away. The
+        # dashboard is a static build that reads a JSON file, so without this
+        # step it keeps showing whichever scan was exported last -- real data
+        # from the wrong run, which is indistinguishable from the right one.
+        dashboard_path = _export_to_dashboard(session, scan_id)
 
     payload = {
         "scan_id": scan_id,
@@ -105,6 +139,7 @@ def run_scan(
         "findings": counts,
         "report": json_path,
         "report_html": html_path,
+        "dashboard_data": dashboard_path,
     }
 
     def render() -> None:
@@ -124,8 +159,19 @@ def run_scan(
         app_ctx.console.print(f"\n  [bold]report[/bold]     open {html_path}")
         app_ctx.console.print(f"  [dim]json       {json_path}[/dim]")
         # The dashboard is the surface people actually demo, so it belongs in the
-        # summary rather than needing to be discovered in the docs.
-        app_ctx.console.print("  [bold]dashboard[/bold]  aegisai dashboard serve")
+        # summary rather than needing to be discovered in the docs. The scan id
+        # is included deliberately: bare `dashboard serve` resolves to the most
+        # recent scan, which is not necessarily the one just run.
+        if dashboard_path:
+            app_ctx.console.print(
+                f"  [bold]dashboard[/bold]  aegisai dashboard serve {scan_id}"
+                "  [dim](data ready)[/dim]"
+            )
+        else:
+            app_ctx.console.print(
+                f"  [bold]dashboard[/bold]  aegisai dashboard export {scan_id}"
+                "  [dim](export first)[/dim]"
+            )
         app_ctx.console.print(f"  [dim]details    aegisai findings list {scan_id}[/dim]\n")
 
     output.emit(app_ctx, payload, render)

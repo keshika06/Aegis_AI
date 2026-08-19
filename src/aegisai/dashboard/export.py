@@ -119,6 +119,17 @@ def build(session: Session, scan_id: str) -> dict[str, Any]:
             "generated_at": datetime.now().isoformat(timespec="seconds"),
             "source": "aegisai",
             "scan_id": scan_id,
+            # When the scan itself ran, which is not when it was exported. A
+            # dashboard showing a three-hour-old scan should say so.
+            "scan_completed_at": (
+                scan.completed_at.isoformat(timespec="seconds") if scan.completed_at else None
+            ),
+            # The newest scan in the database at export time. If this is not
+            # scan_id, the file is already behind and the UI says so rather than
+            # presenting stale numbers as current.
+            "latest_scan_id": session.scalar(
+                select(Scan.id).order_by(Scan.created_at.desc()).limit(1)
+            ),
         },
         "run": _run(
             session,
