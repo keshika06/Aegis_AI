@@ -1,0 +1,57 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      // Breakpoints in any pipeline stage will hit — the CLI runs in-process.
+      "name": "Scan (debug pipeline)",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "aegisai.cli.main",
+      "args": ["scan", "run", "http://127.0.0.1:8001", "--families", "encoding"],
+      "console": "integratedTerminal",
+      "justMyCode": false
+    },
+    {
+      "name": "Discover only (Stage 1)",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "aegisai.cli.main",
+      "args": ["discover", "http://127.0.0.1:8001"],
+      "console": "integratedTerminal",
+      "justMyCode": false
+    },
+    {
+      "name": "Doctor",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "aegisai.cli.main",
+      "args": ["doctor"],
+      "console": "integratedTerminal"
+    },
+    {
+      "name": "Regression replay",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "aegisai.cli.main",
+      "args": ["regression", "run", "http://127.0.0.1:8001"],
+      "console": "integratedTerminal",
+      "justMyCode": false
+    },
+    {
+      // Attach breakpoints inside labs/lab1-chatbot/app.py to watch a probe land.
+      "name": "Lab 1 (debug the target)",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "uvicorn",
+      "args": ["app:app", "--host", "127.0.0.1", "--port", "8001"],
+      "cwd": "${workspaceFolder}/labs/lab1-chatbot",
+      "env": {
+        "CANARY_TOKEN": "AEGIS_CANARY_7f9a2b4c1d3e",
+        "OLLAMA_URL": "http://127.0.0.1:11434",
+        "MODEL_NAME": "qwen2.5:0.5b"
+      },
+      "console": "integratedTerminal",
+      "justMyCode": false
+    }
+  ]
+}

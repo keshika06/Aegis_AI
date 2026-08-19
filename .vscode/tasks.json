@@ -1,0 +1,71 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Lab 1: start (leave running)",
+      "type": "shell",
+      "command": "${workspaceFolder}/.venv/bin/python -m uvicorn app:app --host 127.0.0.1 --port 8001",
+      "options": {
+        "cwd": "${workspaceFolder}/labs/lab1-chatbot",
+        "env": {
+          "CANARY_TOKEN": "AEGIS_CANARY_7f9a2b4c1d3e",
+          "OLLAMA_URL": "http://127.0.0.1:11434",
+          "MODEL_NAME": "qwen2.5:0.5b"
+        }
+      },
+      "isBackground": true,
+      "presentation": { "panel": "dedicated", "group": "aegisai" },
+      "problemMatcher": []
+    },
+    {
+      "label": "Doctor: check environment",
+      "type": "shell",
+      "command": "${workspaceFolder}/.venv/bin/aegisai doctor",
+      "presentation": { "panel": "shared", "clear": true },
+      "problemMatcher": []
+    },
+    {
+      "label": "Scan: fast (encoding only)",
+      "type": "shell",
+      "command": "${workspaceFolder}/.venv/bin/aegisai scan run http://127.0.0.1:8001 --families encoding",
+      "presentation": { "panel": "shared", "clear": true },
+      "problemMatcher": []
+    },
+    {
+      "label": "Scan: full (all evasion families)",
+      "type": "shell",
+      "command": "${workspaceFolder}/.venv/bin/aegisai scan run http://127.0.0.1:8001 --families encoding,semantic,context,fragmentation,mutation",
+      "presentation": { "panel": "shared", "clear": true },
+      "problemMatcher": []
+    },
+    {
+      "label": "Regression: replay (CI gate)",
+      "type": "shell",
+      "command": "${workspaceFolder}/.venv/bin/aegisai regression run http://127.0.0.1:8001",
+      "presentation": { "panel": "shared", "clear": true },
+      "problemMatcher": []
+    },
+    {
+      "label": "Open latest HTML report",
+      "type": "shell",
+      "command": "open \"$(ls -t ~/.aegisai/reports/*.html | head -1)\"",
+      "presentation": { "reveal": "silent" },
+      "problemMatcher": []
+    },
+    {
+      "label": "Tests",
+      "type": "shell",
+      "command": "${workspaceFolder}/.venv/bin/python -m pytest tests -q",
+      "group": { "kind": "test", "isDefault": true },
+      "presentation": { "panel": "shared", "clear": true },
+      "problemMatcher": []
+    },
+    {
+      "label": "Lint + format",
+      "type": "shell",
+      "command": "${workspaceFolder}/.venv/bin/ruff check src tests && ${workspaceFolder}/.venv/bin/ruff format src tests",
+      "presentation": { "panel": "shared", "clear": true },
+      "problemMatcher": []
+    }
+  ]
+}
