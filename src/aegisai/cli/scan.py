@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import json as jsonlib
+
 import typer
 from sqlalchemy import select
 
@@ -10,9 +12,14 @@ from aegisai.cli.context import AppContext
 from aegisai.cli.options import JSON_OPTION
 from aegisai.cli.stubs import planned
 from aegisai.cli.target import require_authorized
-from aegisai.core.db import session_scope
+from aegisai.core.db import session_factory, session_scope
+from aegisai.core.exceptions import NotFoundError
+from aegisai.core.exit_codes import ExitCode
+from aegisai.models.enums import FindingVerdict, ScanStatus
+from aegisai.models.finding import Finding
 from aegisai.models.scan import Scan
 from aegisai.models.target import Target
+from aegisai.pipeline.runner import TOTAL_PIPELINE_STAGES, run_pipeline
 
 app = typer.Typer(help="Run security scans and inspect their results.")
 
@@ -22,38 +29,123 @@ def run_scan(
     ctx: typer.Context,
     target: str = typer.Argument(..., help="Registered target id or URL."),
     profile: str = typer.Option("standard", "--profile", "-p", help="quick | standard | deep"),
-    stages: str | None = typer.Option(
-        None, "--stages", help="Comma-separated subset, e.g. 1,2A,2B. Default: all."
-    ),
     engines: str = typer.Option(
         "native", "--engines", help="Attack engines: native,garak,pyrit,promptfoo"
     ),
-    families: str | None = typer.Option(
-        None, "--families", help="Stage 2B transformation families to include."
-    ),
-    fmt: str = typer.Option("html,json", "--format", help="Report formats to render."),
-    out: str | None = typer.Option(None, "--out", help="Directory for rendered reports."),
+    fmt: str = typer.Option("json", "--format", help="Report formats to render."),
+    json_: bool = JSON_OPTION,
 ) -> None:
-    """Run the full 11-stage pipeline against an authorized target."""
+    """Run the pipeline against an authorized target.
+
+    Exits 1 when any CONFIRMED finding exists, so this can gate a CI build.
+    """
     app_ctx: AppContext = ctx.obj
+    app_ctx.apply_json(json_)
+    engine = app_ctx.engine()
 
-    # The authorization gate runs before anything else, including the
-    # not-yet-implemented guard below: an unauthorized target must be refused as
-    # unauthorized (exit 3) no matter how much of the pipeline exists yet.
-    with session_scope(app_ctx.engine()) as session:
-        require_authorized(session, target)
+    # The authorization gate runs before anything else: an unauthorized target is
+    # refused as unauthorized regardless of how much of the pipeline exists.
+    with session_scope(engine) as session:
+        target_row = require_authorized(session, target)
+        target_url, target_id = target_row.url, target_row.id
 
-    planned("scan run", "Phase 1 (vertical slice)")
+        scan = Scan(
+            target_id=target_id,
+            profile=profile,
+            status=ScanStatus.PENDING,
+            total_stages=TOTAL_PIPELINE_STAGES,
+            engines={"requested": [e.strip() for e in engines.split(",") if e.strip()]},
+            config={"format": fmt},
+        )
+        session.add(scan)
+        session.flush()
+        scan_id = scan.id
+
+    if not app_ctx.json_output:
+        app_ctx.console.print(f"\n  [bold]AEGISAI[/bold]  {scan_id}  →  {target_url}\n")
+
+    session = session_factory(engine)()
+    try:
+        for progress in run_pipeline(
+            scan_id=scan_id,
+            session=session,
+            config=app_ctx.config,
+            target_url=target_url,
+            target_id=target_id,
+        ):
+            if not app_ctx.json_output and not app_ctx.quiet:
+                mark = "[green]✓[/green]" if progress.result.ok else "[yellow]![/yellow]"
+                app_ctx.console.print(
+                    f"  [{progress.index}/{TOTAL_PIPELINE_STAGES}] "
+                    f"{progress.label:<26} {mark}  [dim]{progress.result.summary}[/dim]"
+                )
+    finally:
+        session.close()
+
+    with session_scope(engine) as session:
+        findings = list(session.scalars(select(Finding).where(Finding.scan_id == scan_id)))
+        counts = {v.value: 0 for v in FindingVerdict}
+        for finding in findings:
+            counts[finding.verdict] = counts.get(finding.verdict, 0) + 1
+        report_path = str(app_ctx.config.reports_dir / f"{scan_id}.json")
+
+    payload = {"scan_id": scan_id, "target": target_url, "findings": counts, "report": report_path}
+
+    def render() -> None:
+        app_ctx.console.print()
+        confirmed = counts.get(FindingVerdict.CONFIRMED, 0)
+        headline = (
+            f"[bold red]{confirmed} CONFIRMED[/bold red]"
+            if confirmed
+            else "[green]0 CONFIRMED[/green]"
+        )
+        app_ctx.console.print(
+            f"  {headline} · {counts.get(FindingVerdict.LIKELY, 0)} LIKELY "
+            f"· {counts.get(FindingVerdict.SUSPECTED, 0)} SUSPECTED"
+        )
+        app_ctx.console.print(f"  [dim]report: {report_path}[/dim]")
+        app_ctx.console.print(f"  [dim]details: aegisai findings list {scan_id}[/dim]\n")
+
+    output.emit(app_ctx, payload, render)
+
+    if counts.get(FindingVerdict.CONFIRMED, 0) > 0:
+        raise typer.Exit(int(ExitCode.FINDINGS))
 
 
 @app.command("status")
 def scan_status(
     ctx: typer.Context,
     scan_id: str = typer.Argument(..., help="Scan id."),
-    watch: bool = typer.Option(False, "--watch", "-w", help="Poll until the scan finishes."),
+    json_: bool = JSON_OPTION,
 ) -> None:
-    """Show live stage and progress for a scan."""
-    planned("scan status", "Phase 1")
+    """Show stage and progress for a scan."""
+    app_ctx: AppContext = ctx.obj
+    app_ctx.apply_json(json_)
+
+    with session_scope(app_ctx.engine()) as session:
+        scan = session.get(Scan, scan_id)
+        if scan is None:
+            raise NotFoundError(
+                f"No scan with id '{scan_id}'.", hint="List scans with:  aegisai scan list"
+            )
+        payload = {
+            "scan_id": scan.id,
+            "status": scan.status,
+            "stage": scan.current_stage,
+            "stages_completed": scan.stages_completed,
+            "total_stages": scan.total_stages,
+            "message": scan.message,
+            "error": scan.error,
+            "started_at": scan.started_at,
+            "completed_at": scan.completed_at,
+        }
+
+    def render() -> None:
+        for key, value in payload.items():
+            if value is not None:
+                app_ctx.console.print(f"  [dim]{key:<18}[/dim] {value}")
+
+    output.emit(app_ctx, payload, render)
 
 
 @app.command("list")
@@ -116,15 +208,24 @@ def cancel_scan(
     scan_id: str = typer.Argument(..., help="Scan id."),
 ) -> None:
     """Stop a running scan."""
-    planned("scan cancel", "Phase 1")
+    planned("scan cancel", "Phase 2")
 
 
 @app.command("report")
 def scan_report(
     ctx: typer.Context,
     scan_id: str = typer.Argument(..., help="Scan id."),
-    fmt: str = typer.Option("html", "--format", help="html | json | pdf"),
-    out: str | None = typer.Option(None, "--out", help="Output directory."),
+    fmt: str = typer.Option("json", "--format", help="json (html and pdf land in Phase 6)"),
 ) -> None:
-    """Render (or re-render) the report for a scan."""
-    planned("scan report", "Phase 6 (reporting)")
+    """Print the stored report for a scan."""
+    app_ctx: AppContext = ctx.obj
+    if fmt != "json":
+        planned(f"scan report --format {fmt}", "Phase 6 (reporting)")
+
+    path = app_ctx.config.reports_dir / f"{scan_id}.json"
+    if not path.exists():
+        raise NotFoundError(
+            f"No report found for '{scan_id}'.",
+            hint=f"Run the scan first:  aegisai scan run <target>   (expected {path})",
+        )
+    app_ctx.console.print_json(jsonlib.dumps(jsonlib.loads(path.read_text(encoding="utf-8"))))

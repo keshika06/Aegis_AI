@@ -62,7 +62,14 @@ def test_unknown_option_is_a_usage_error(aegis_home: Path, run: Callable[..., in
 
 def test_unimplemented_command_exits_non_zero(initialized: Path, run: Callable[..., int]) -> None:
     """A stub must never look like a clean run to a script."""
-    assert run("findings", "list", "scan-abc") == ExitCode.USAGE
+    assert run("serve") == ExitCode.USAGE
+
+
+def test_implemented_read_command_on_empty_data_succeeds(
+    initialized: Path, run: Callable[..., int]
+) -> None:
+    """An empty result is a successful query, not an error."""
+    assert run("findings", "list", "scan-does-not-exist", "--json") == ExitCode.OK
 
 
 def test_json_flag_works_after_the_subcommand(

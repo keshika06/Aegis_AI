@@ -1,0 +1,23 @@
+# Intentionally vulnerable labs, for authorized AegisAI testing only.
+#
+# These deliberately have no guardrails. Bind them to localhost and never expose
+# them to a network you do not control.
+
+services:
+  lab1:
+    build:
+      context: ../labs/lab1-chatbot
+    container_name: aegisai-lab1
+    ports:
+      # Localhost only - not 0.0.0.0. A vulnerable-by-design service should not
+      # be reachable from the LAN.
+      - "127.0.0.1:8001:8001"
+    environment:
+      # Points at the host's Ollama rather than a second containerised copy:
+      # the in-container model ran ~10x slower and caused probe timeouts.
+      - OLLAMA_URL=${OLLAMA_URL:-http://host.docker.internal:11434}
+      - MODEL_NAME=${MODEL_NAME:-qwen2.5:0.5b}
+      - CANARY_TOKEN=${CANARY_TOKEN:-AEGIS_CANARY_7f9a2b4c1d3e}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    restart: unless-stopped

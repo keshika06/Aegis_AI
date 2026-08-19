@@ -36,6 +36,11 @@ build-backend = "setuptools.build_meta"
 [tool.setuptools.packages.find]
 where = ["src"]
 
+[tool.setuptools.package-data]
+# The attack library ships with the package; without this it is missing from a
+# non-editable install and the planner silently finds zero payloads.
+aegisai = ["knowledge_base/payloads/*.yaml"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["src"]

@@ -123,14 +123,70 @@ def init_command(
 def discover_command(
     ctx: typer.Context,
     target_ref: str = typer.Argument(..., help="Registered target id or URL."),
+    json_: bool = JSON_OPTION,
 ) -> None:
     """Run Stage 1 only: map a target's attack surface without scanning it."""
-    # Discovery sends live requests to the target, so it sits behind the same
-    # authorization gate as a full scan.
-    with session_scope(ctx.obj.engine()) as session:
-        require_authorized(session, target_ref)
+    app_ctx: AppContext = ctx.obj
+    app_ctx.apply_json(json_)
 
-    planned("discover", "Phase 2 (discovery)")
+    from aegisai.cli import output
+    from aegisai.models.enums import ScanStatus
+    from aegisai.models.scan import Scan
+    from aegisai.pipeline.base import ScanContext
+    from aegisai.pipeline.discovery.stage import DiscoveryStage
+
+    engine = app_ctx.engine()
+    with session_scope(engine) as session:
+        # Discovery sends live requests to the target, so it sits behind the same
+        # authorization gate as a full scan.
+        target_row = require_authorized(session, target_ref)
+
+        # Recorded as a scan so the profile is persisted and inspectable, rather
+        # than being printed once and lost.
+        scan = Scan(target_id=target_row.id, profile="discovery-only", status=ScanStatus.RUNNING)
+        session.add(scan)
+        session.flush()
+
+        scan_ctx = ScanContext(
+            scan_id=scan.id,
+            session=session,
+            config=app_ctx.config,
+            target_url=target_row.url,
+            target_id=target_row.id,
+        )
+        result = DiscoveryStage().run(scan_ctx)
+
+        scan.status = ScanStatus.COMPLETED
+        scan.current_stage = "1"
+        scan.stages_completed = 1
+        scan.message = result.summary
+        payload = {
+            "scan_id": scan.id,
+            "target_url": target_row.url,
+            "summary": result.summary,
+            "endpoints": scan_ctx.profile.endpoints if scan_ctx.profile else [],
+            "capabilities": scan_ctx.profile.capabilities if scan_ctx.profile else {},
+        }
+
+    def render() -> None:
+        app_ctx.console.print(
+            f"\n  [bold]{payload['target_url']}[/bold]  [dim]{payload['summary']}[/dim]\n"
+        )
+        rows = [
+            (
+                e["method"],
+                e["path"],
+                e.get("text_key") or "-",
+                e.get("text_key_confidence") or e.get("confidence", "-"),
+                "[green]chat[/green]" if e.get("is_chat_surface") else "",
+            )
+            for e in payload["endpoints"]
+        ]
+        app_ctx.console.print(
+            output.build_table(["METHOD", "PATH", "TEXT KEY", "CONFIDENCE", "SURFACE"], rows)
+        )
+
+    output.emit(app_ctx, payload, render)
 
 
 @app.command("serve")
@@ -172,8 +228,12 @@ def main() -> int:
     as a traceback.
     """
     try:
-        app(standalone_mode=False)
-        return int(ExitCode.OK)
+        # With standalone_mode off, Typer catches `typer.Exit` itself and hands
+        # the code back as the return value rather than raising it. Ignoring
+        # this return silently swallows every deliberate non-zero exit --
+        # including the CONFIRMED-findings CI gate.
+        result = app(standalone_mode=False)
+        return result if isinstance(result, int) else int(ExitCode.OK)
     except AegisError as exc:
         render_error(None, exc)
         return int(exc.exit_code)
