@@ -136,6 +136,29 @@ aegisai findings list <scan-id> --verdict CONFIRMED --json | jq '.[0].evidence'
 
 ---
 
+## 4b. The web dashboard
+
+The scan writes an HTML report, but the React dashboard is the richer view — the
+attack-path graph, defence layers, and the evidence explorer.
+
+```bash
+aegisai dashboard serve
+```
+
+That exports your most recent scan, installs frontend dependencies on first run,
+and opens a dev server on http://localhost:5173.
+
+To refresh it after a later scan without restarting the server:
+
+```bash
+aegisai dashboard export          # newest scan
+aegisai dashboard export <scan-id>  # a specific one
+```
+
+Requires Node.js. Without it, the HTML report covers the same findings.
+
+---
+
 ## 5. The closed loop
 
 Every CONFIRMED finding is stored as a regression test holding the exact payload

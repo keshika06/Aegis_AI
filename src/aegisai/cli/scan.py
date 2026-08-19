@@ -121,9 +121,12 @@ def run_scan(
         )
         # The HTML report is what a person actually opens, so it leads and comes
         # with a copy-pasteable command — the full path is easy to mistype.
-        app_ctx.console.print(f"\n  [bold]report[/bold]  open {html_path}")
-        app_ctx.console.print(f"  [dim]json    {json_path}[/dim]")
-        app_ctx.console.print(f"  [dim]details aegisai findings list {scan_id}[/dim]\n")
+        app_ctx.console.print(f"\n  [bold]report[/bold]     open {html_path}")
+        app_ctx.console.print(f"  [dim]json       {json_path}[/dim]")
+        # The dashboard is the surface people actually demo, so it belongs in the
+        # summary rather than needing to be discovered in the docs.
+        app_ctx.console.print("  [bold]dashboard[/bold]  aegisai dashboard serve")
+        app_ctx.console.print(f"  [dim]details    aegisai findings list {scan_id}[/dim]\n")
 
     output.emit(app_ctx, payload, render)
 
