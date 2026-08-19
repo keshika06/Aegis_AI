@@ -16,6 +16,7 @@ from aegisai.cli import (
     analysis,
     attack,
     config_cmd,
+    dashboard,
     doctor,
     findings,
     labs,
@@ -55,6 +56,7 @@ app.add_typer(attack.app, name="attack")
 app.add_typer(regression.app, name="regression")
 app.add_typer(labs.app, name="labs")
 app.add_typer(config_cmd.app, name="config")
+app.add_typer(dashboard.app, name="dashboard")
 
 
 def _version_callback(value: bool) -> None:
