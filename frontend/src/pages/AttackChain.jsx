@@ -1,142 +1,193 @@
 import { useState } from 'react'
-import { ZoomIn, ZoomOut, Maximize2, RotateCcw, Expand, Map } from 'lucide-react'
+import { ShieldOff, ShieldCheck, Circle, ChevronRight, Zap } from 'lucide-react'
 import { PageHeader, Panel } from '../components/Panel'
-import SeverityBadge from '../components/SeverityBadge'
-import { attackChainNodes, attackTimeline } from '../data/scanData'
+import { attackChains, attackTimeline } from '../data/scanData'
 
-const statusColor = {
-  OBSERVED: '#3b82f6',
-  BLOCKED: '#22c55e',
-  BYPASSED: '#ef4444',
-  SUCCESS: '#f97316',
-  FAILED: '#64748b'
+const STATUS = {
+  failed: { color: '#ef4444', bg: '#3a1518', border: '#5c2026', Icon: ShieldOff, word: 'failed' },
+  ok: { color: '#22c55e', bg: '#12301d', border: '#1c4d2e', Icon: ShieldCheck, word: 'held' },
+  info: { color: '#64748b', bg: '#1c2333', border: '#2a3348', Icon: Circle, word: 'observed' }
 }
 
-function riskSeverity(risk) {
-  if (risk >= 80) return 'CRITICAL'
-  if (risk >= 60) return 'HIGH'
-  if (risk >= 35) return 'MEDIUM'
-  return 'LOW'
+function Phase({ phase, isLast }) {
+  const s = STATUS[phase.status] ?? STATUS.info
+  const { Icon } = s
+
+  return (
+    <div className="flex gap-4">
+      {/* Rail: the connector makes the sequence read as one path, not five cards */}
+      <div className="flex flex-col items-center shrink-0">
+        <div
+          className="w-9 h-9 rounded-full flex items-center justify-center border-2 shrink-0"
+          style={{ borderColor: s.color, background: s.bg }}
+        >
+          <Icon size={16} style={{ color: s.color }} />
+        </div>
+        {!isLast && <div className="w-0.5 flex-1 min-h-[28px] bg-base-border mt-1" />}
+      </div>
+
+      <div className="pb-7 min-w-0 flex-1">
+        <div className="flex items-baseline gap-2 flex-wrap mb-1">
+          <span className="mono text-[11px] text-slate-500">PHASE {phase.n}</span>
+          <span className="text-[15px] font-bold text-slate-100">{phase.name}</span>
+          <span
+            className="text-[10px] font-bold uppercase tracking-wide px-2 py-0.5 rounded-full"
+            style={{ background: s.bg, color: s.color, border: `1px solid ${s.border}` }}
+          >
+            {s.word}
+          </span>
+        </div>
+
+        <div className="text-[14px] font-semibold mb-1" style={{ color: s.color }}>
+          {phase.headline}
+        </div>
+        <p className="text-[13px] text-slate-400 max-w-[70ch]">{phase.detail}</p>
+
+        {phase.data?.text && (
+          <div className="mt-2.5">
+            <div className="text-[10px] uppercase tracking-wide text-slate-500 mb-1">
+              {phase.data.label}
+            </div>
+            <pre className="mono text-[12px] text-slate-200 bg-base-bg rounded-lg p-3 border border-base-border whitespace-pre-wrap break-words max-h-40 overflow-y-auto">
+{phase.data.text}
+            </pre>
+          </div>
+        )}
+      </div>
+    </div>
+  )
 }
 
 export default function AttackChain() {
-  const [selected, setSelected] = useState(attackChainNodes[7])
+  const [selected, setSelected] = useState(0)
+  const chain = attackChains[selected]
+
+  if (!chain) {
+    return (
+      <div>
+        <PageHeader title="Attack Chain Explorer" subtitle="How an objective became a confirmed finding, phase by phase." />
+        <Panel><div className="text-sm text-slate-500 py-6 text-center">No attack chains in this scan.</div></Panel>
+      </div>
+    )
+  }
 
   return (
     <div>
-      <PageHeader title="Attack Chain Explorer" subtitle="Correlate security events and visualize the complete attack path." />
+      <PageHeader
+        title="Attack Chain Explorer"
+        subtitle="How one objective travelled from prompt to proof, and which defence failed at each step."
+      />
 
-      <div className="grid grid-cols-1 xl:grid-cols-3 gap-5 mb-6">
-        <Panel
-          title="Attack Chain Graph"
-          className="xl:col-span-2"
-          right={
-            <div className="flex items-center gap-1">
-              {[ZoomIn, ZoomOut, Maximize2, RotateCcw, Expand, Map].map((Icon, i) => (
-                <button key={i} className="p-1.5 rounded-md text-slate-500 hover:text-slate-200 hover:bg-base-card2 transition-colors">
-                  <Icon size={14} />
-                </button>
-              ))}
-            </div>
-          }
-        >
-          <div className="overflow-x-auto scroll-thin pb-2">
-            <div className="flex items-stretch gap-0 min-w-[900px]">
-              {attackChainNodes.map((n, i) => (
-                <div key={n.id} className="flex items-center">
-                  <button
-                    onClick={() => setSelected(n)}
-                    className={`w-[104px] h-[104px] rounded-xl border-2 flex flex-col items-center justify-center gap-1 p-2 text-center transition-all ${
-                      selected?.id === n.id ? 'scale-105 shadow-glow' : 'hover:scale-[1.02]'
-                    }`}
-                    style={{
-                      borderColor: statusColor[n.status],
-                      backgroundColor: selected?.id === n.id ? '#161d2e' : '#131a29'
-                    }}
-                  >
-                    <span className="text-[11px] font-semibold text-slate-200 leading-tight">{n.name}</span>
-                    <span className="text-[9px] font-bold uppercase" style={{ color: statusColor[n.status] }}>{n.status}</span>
-                    {n.risk > 0 && <span className="mono text-[10px] text-slate-500">{n.risk}</span>}
-                  </button>
-                  {i < attackChainNodes.length - 1 && (
-                    <div className="w-6 h-0.5 shrink-0" style={{ backgroundColor: '#2a3348' }} />
-                  )}
-                </div>
-              ))}
+      {/* Chain selector — several objectives usually reach a finding */}
+      {attackChains.length > 1 && (
+        <div className="flex items-center gap-2 mb-5 flex-wrap">
+          {attackChains.map((c, i) => (
+            <button
+              key={c.id}
+              onClick={() => { setSelected(i); }}
+              className={`px-3 py-2 rounded-lg text-left transition-colors border ${
+                i === selected
+                  ? 'bg-brand text-white border-brand'
+                  : 'bg-base-card text-slate-400 hover:text-slate-200 border-base-border'
+              }`}
+            >
+              <div className="text-[12px] font-bold truncate max-w-[220px]">{c.findingTitle}</div>
+              <div className={`text-[10px] mono ${i === selected ? 'text-white/70' : 'text-slate-500'}`}>
+                {c.failedPhases} phase{c.failedPhases === 1 ? '' : 's'} failed · risk {c.risk}
+              </div>
+            </button>
+          ))}
+        </div>
+      )}
+
+      <div className="grid grid-cols-1 xl:grid-cols-3 gap-5 mb-5">
+        <Panel title="Attack sequence" className="xl:col-span-2">
+          <div className="mb-5 p-3 rounded-lg border border-base-border bg-base-card2">
+            <div className="text-[13px] font-bold text-slate-100 mb-0.5">{chain.findingTitle}</div>
+            <div className="text-[12px] text-slate-400">
+              {chain.owasp.join(', ') || 'unmapped'} · {chain.verdict} ·{' '}
+              <span className="font-bold" style={{ color: STATUS.failed.color }}>
+                {chain.failedPhases} of {chain.phases.length} phases failed
+              </span>
             </div>
           </div>
-          <div className="flex items-center gap-4 mt-4 pt-3 border-t border-base-border flex-wrap">
-            {Object.entries(statusColor).map(([k, v]) => (
-              <div key={k} className="flex items-center gap-1.5 text-[11px] text-slate-500">
-                <span className="w-2.5 h-2.5 rounded-sm" style={{ backgroundColor: v }} /> {k}
-              </div>
+
+          <div>
+            {chain.phases.map((p, i) => (
+              <Phase key={p.n} phase={p} isLast={i === chain.phases.length - 1} />
             ))}
           </div>
         </Panel>
 
-        <Panel title={selected ? selected.name : 'Select a Node'} className="min-h-[300px]">
-          {selected && (
-            <div className="space-y-4">
-              <div className="flex items-center gap-2">
-                <SeverityBadge level={riskSeverity(selected.risk)} size="lg" />
-                <span className="text-xs font-bold" style={{ color: statusColor[selected.status] }}>{selected.status}</span>
-              </div>
-              <div className="grid grid-cols-2 gap-3 text-[13px]">
-                <div>
-                  <div className="text-[11px] text-slate-500">Risk Score</div>
-                  <div className="font-bold text-white text-lg">{selected.risk}/100</div>
+        <Panel title="Where it broke down">
+          <p className="text-[13px] text-slate-400 mb-4">
+            Each phase is a place something could have stopped this. Green means a defence held;
+            red means it should have acted and did not.
+          </p>
+          <div className="space-y-2">
+            {chain.phases.map((p) => {
+              const s = STATUS[p.status] ?? STATUS.info
+              return (
+                <div
+                  key={p.n}
+                  className="flex items-center gap-2.5 p-2.5 rounded-lg border"
+                  style={{ borderColor: `${s.color}44`, background: `${s.color}0f` }}
+                >
+                  <span className="mono text-[11px] text-slate-500 w-4 shrink-0">{p.n}</span>
+                  <span className="text-[13px] text-slate-200 flex-1 min-w-0 truncate">{p.name}</span>
+                  <span className="text-[11px] font-bold uppercase shrink-0" style={{ color: s.color }}>
+                    {s.word}
+                  </span>
                 </div>
-                <div>
-                  <div className="text-[11px] text-slate-500">Timestamp</div>
-                  <div className="mono text-slate-300">{selected.timestamp}</div>
-                </div>
-                <div>
-                  <div className="text-[11px] text-slate-500">OWASP</div>
-                  <div className="mono text-slate-300">{selected.owasp}</div>
-                </div>
-                <div>
-                  <div className="text-[11px] text-slate-500">Evidence</div>
-                  <div className="mono text-brand">EV-0042</div>
-                </div>
-              </div>
-              <div className="pt-3 border-t border-base-border">
-                <div className="text-[11px] text-slate-500 mb-1">Reason</div>
-                <p className="text-[13px] text-slate-300 leading-relaxed">
-                  {selected.name === 'Tool Invocation'
-                    ? 'The agent invoked a sensitive tool after the guardrail was bypassed, allowing untrusted retrieved content to influence a privileged action.'
-                    : `Event correlated as ${selected.status.toLowerCase()} within the active attack chain investigation for RUN-042.`}
-                </p>
-              </div>
-              <div className="flex items-center justify-between text-[12px] pt-3 border-t border-base-border">
-                <div className="text-slate-500">Previous Node</div>
-                <div className="text-slate-500">Next Node</div>
-              </div>
-              <div className="flex items-center justify-between text-[13px] font-medium text-slate-300">
-                <div>{attackChainNodes[Math.max(0, attackChainNodes.findIndex((n) => n.id === selected.id) - 1)].name}</div>
-                <div>{attackChainNodes[Math.min(attackChainNodes.length - 1, attackChainNodes.findIndex((n) => n.id === selected.id) + 1)].name}</div>
-              </div>
-            </div>
-          )}
+              )
+            })}
+          </div>
+
+          <div className="mt-5 pt-4 border-t border-base-border">
+            <div className="text-[11px] uppercase tracking-wide text-slate-500 mb-1.5">Remediation</div>
+            <p className="text-[13px] text-slate-300">
+              {chain.phases.find((p) => p.n === 8)?.detail || 'No mitigation recorded.'}
+            </p>
+          </div>
         </Panel>
       </div>
 
-      <Panel title="Attack Timeline">
-        <div className="space-y-0">
-          {attackTimeline.map((t, i) => {
-            const node = attackChainNodes.find((n) => n.id === t.node)
-            return (
-              <button
-                key={i}
-                onClick={() => setSelected(node)}
-                className="w-full flex items-center gap-4 py-3 border-b border-base-border last:border-0 hover:bg-base-card2 px-2 -mx-2 rounded transition-colors text-left"
-              >
-                <span className="mono text-xs text-slate-500 w-20 shrink-0">{t.time}</span>
-                <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: statusColor[node?.status] || '#64748b' }} />
-                <span className="text-[13px] text-slate-200 flex-1">{t.label}</span>
-                <span className="text-[11px] text-slate-500 mono">{node?.name}</span>
-              </button>
-            )
-          })}
+      <Panel title="Runtime activity">
+        <p className="text-[13px] text-slate-400 mb-4">
+          What the application did while the scan ran. Privileged actions are listed first — those
+          changed state, rather than only producing text.
+        </p>
+        <div className="space-y-1.5">
+          {attackTimeline.length === 0 && (
+            <div className="text-sm text-slate-500 py-4 text-center">
+              The target exposed no runtime telemetry for this scan.
+            </div>
+          )}
+          {attackTimeline.slice(0, 25).map((t, i) => (
+            <div
+              key={i}
+              className="flex items-start gap-3 p-2.5 rounded-lg border border-base-border hover:bg-base-card2 transition-colors"
+            >
+              <span className="mono text-[11px] text-slate-500 shrink-0 w-[70px]">{t.time}</span>
+              {t.kind === 'tool_call'
+                ? <Zap size={14} className="shrink-0 mt-0.5" style={{ color: t.critical ? '#ef4444' : '#eab308' }} />
+                : <Circle size={8} className="shrink-0 mt-1.5 text-slate-600" />}
+              <span className="min-w-0 flex-1">
+                <span className="block text-[13px] text-slate-200">
+                  {t.label}
+                  {t.note && <span className="mono text-[11px] text-slate-500 ml-2">{t.note}</span>}
+                </span>
+                {t.detail && (
+                  <span className="block mono text-[11px] text-slate-500 truncate">{t.detail}</span>
+                )}
+                {t.prompt && (
+                  <span className="block mono text-[11px] text-slate-600 truncate mt-0.5">
+                    <ChevronRight size={10} className="inline" /> caused by: "{t.prompt}"
+                  </span>
+                )}
+              </span>
+            </div>
+          ))}
         </div>
       </Panel>
     </div>

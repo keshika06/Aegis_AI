@@ -140,7 +140,18 @@ def build(session: Session, scan_id: str) -> dict[str, Any]:
             findings, risks, evidence_by_finding, variants, cases, violations
         ),
         "attackChainNodes": _chain_nodes(chains, findings, risks),
-        "attackTimeline": _timeline(events),
+        "attackChains": _chains(
+            chains,
+            findings,
+            risks,
+            variants,
+            cases,
+            {e.id: e for e in evaluations},
+            evidence_by_finding,
+            violations,
+            events,
+        ),
+        "attackTimeline": _timeline(events, variants),
         "riskComponents": _risk_components(risks),
         "factorContributions": _contributions(risks),
         "evidenceItems": _evidence(
@@ -407,6 +418,228 @@ def _detail(findings, risks, evidence_by_finding, variants, cases, violations) -
     }
 
 
+PHASE_OK = "ok"
+"""A defence did its job at this phase."""
+PHASE_FAILED = "failed"
+"""A defence should have acted here and did not."""
+PHASE_INFO = "info"
+"""Something happened; it is neither a pass nor a failure on its own."""
+
+
+def _chains(
+    chains, findings, risks, variants, cases, evaluations, evidence_by_finding, violations, events
+) -> list[dict]:
+    """One attack chain as an ordered sequence of phases.
+
+    The previous graph rendered raw enum values — "None", "Confirmed" — as node
+    labels, which said nothing about what happened. This walks the attack the way
+    a reader needs to follow it: what was wanted, how it was sent, what each
+    defence did about it, what the application then did, and what proves it.
+    """
+    violations_by_variant: dict[str, list] = {}
+    for violation in violations:
+        violations_by_variant.setdefault(violation.variant_id or "", []).append(violation)
+
+    events_by_variant: dict[str, list] = {}
+    for event in events:
+        events_by_variant.setdefault(event.variant_id or "", []).append(event)
+
+    out = []
+    for chain in sorted(chains, key=lambda c: c.severity or 0, reverse=True):
+        chain_findings = [f for f in findings if f.id in (chain.finding_ids or [])]
+        if not chain_findings:
+            continue
+        # The highest-scoring finding is the one worth narrating.
+        finding = max(chain_findings, key=lambda f: risks[f.id].score if f.id in risks else 0)
+        risk = risks.get(finding.id)
+        variant = variants.get(finding.variant_id or "")
+        case = cases.get(variant.attack_case_id) if variant else None
+        evaluation = evaluations.get(finding.control_evaluation_id or "")
+        variant_events = events_by_variant.get(finding.variant_id or "", [])
+        chain_violations = violations_by_variant.get(finding.variant_id or "", [])
+        chain_evidence = evidence_by_finding.get(finding.id, [])
+
+        llm_events = [e for e in variant_events if e.event_type == "llm_io"]
+        tool_events = [e for e in variant_events if e.event_type == "tool_call"]
+
+        verdict = evaluation.verdict if evaluation else None
+        control_failed = verdict == ControlVerdict.ACCEPTED
+
+        phases = [
+            {
+                "n": 1,
+                "name": "Objective",
+                "status": PHASE_INFO,
+                "headline": (case.original_intent if case else "unknown").replace("_", " "),
+                "detail": (
+                    f"The attacker's goal, expressed independently of wording. Tagged "
+                    f"{finding.owasp_tag or 'unmapped'}"
+                    f"{' · ' + (owasp_name(finding.owasp_tag) or '') if finding.owasp_tag else ''}."
+                ),
+                "data": None,
+            },
+            {
+                "n": 2,
+                "name": "Delivery",
+                "status": PHASE_INFO,
+                "headline": (
+                    "Sent as written"
+                    if not variant or variant.transformation == "none"
+                    else f"Re-expressed using {variant.transformation}"
+                ),
+                "detail": (
+                    "The objective reached the target in its original form — nothing had to be "
+                    "disguised."
+                    if not variant or variant.transformation == "none"
+                    else "The same objective, represented differently to test whether the "
+                    "target's controls generalise across form."
+                ),
+                "data": {"label": "Prompt sent", "text": variant.payload if variant else None},
+            },
+            {
+                "n": 3,
+                "name": "Target control",
+                "status": PHASE_FAILED if control_failed else PHASE_OK,
+                "headline": DEFENCE_OUTCOME.get(verdict, ("Unknown", ""))[0],
+                "detail": DEFENCE_OUTCOME.get(verdict, ("", "No control decision recorded."))[1],
+                "data": (
+                    {
+                        "label": "Recorded reason",
+                        "text": evaluation.verdict_reason if evaluation else None,
+                    }
+                    if evaluation
+                    else None
+                ),
+            },
+            {
+                "n": 4,
+                "name": "Model behaviour",
+                "status": PHASE_FAILED if llm_events else PHASE_INFO,
+                "headline": (
+                    "The model answered the injected instruction"
+                    if llm_events
+                    else "No model activity was observed"
+                ),
+                "detail": (
+                    "The probe reached the model, which produced a response rather than declining."
+                    if llm_events
+                    else "The target exposed no telemetry for this probe."
+                ),
+                "data": (
+                    {
+                        "label": "Model output",
+                        "text": (llm_events[0].payload or {}).get("output"),
+                    }
+                    if llm_events
+                    else None
+                ),
+            },
+            {
+                "n": 5,
+                "name": "Application behaviour",
+                "status": PHASE_FAILED if tool_events else PHASE_OK,
+                "headline": (
+                    f"{len(tool_events)} privileged action(s) ran"
+                    if tool_events
+                    else "No privileged action was triggered"
+                ),
+                "detail": (
+                    "The model's output was trusted as a command, so an injected instruction "
+                    "became a real state change."
+                    if tool_events
+                    else "Nothing downstream acted on the model's output for this probe."
+                ),
+                "data": (
+                    {
+                        "label": "Tool invoked",
+                        "text": "; ".join(
+                            f"{(e.payload or {}).get('tool')}({(e.payload or {}).get('arguments')})"
+                            for e in tool_events
+                        ),
+                    }
+                    if tool_events
+                    else None
+                ),
+            },
+            {
+                "n": 6,
+                "name": "Policy check",
+                "status": PHASE_FAILED if chain_violations else PHASE_OK,
+                "headline": (
+                    f"{len(chain_violations)} declared boundary crossed"
+                    if chain_violations
+                    else "No declared boundary was crossed"
+                ),
+                "detail": (
+                    "Behaviour the target's own contract forbids, measured deterministically."
+                    if chain_violations
+                    else "Observed behaviour stayed inside the declared contract."
+                ),
+                "data": (
+                    {
+                        "label": "Violated",
+                        "text": "; ".join(
+                            f"{v.boundary} — observed: {v.observed}" for v in chain_violations
+                        ),
+                    }
+                    if chain_violations
+                    else None
+                ),
+            },
+            {
+                "n": 7,
+                "name": "Evidence",
+                "status": (
+                    PHASE_FAILED if any(e.deterministic for e in chain_evidence) else PHASE_INFO
+                ),
+                "headline": (
+                    f"{sum(1 for e in chain_evidence if e.deterministic)} deterministic proof(s)"
+                    if any(e.deterministic for e in chain_evidence)
+                    else "Supporting signals only"
+                ),
+                "detail": (
+                    "Proof that a security boundary was crossed, independent of how the response "
+                    "reads."
+                    if any(e.deterministic for e in chain_evidence)
+                    else "Nothing here can raise the finding above SUSPECTED on its own."
+                ),
+                "data": {
+                    "label": "Collected",
+                    "text": "; ".join(f"{e.evidence_type}: {e.summary}" for e in chain_evidence),
+                },
+            },
+            {
+                "n": 8,
+                "name": "Outcome",
+                "status": PHASE_FAILED
+                if finding.verdict == FindingVerdict.CONFIRMED
+                else PHASE_INFO,
+                "headline": (
+                    f"{finding.verdict}" + (f" · {risk.risk_level} {risk.score}/10" if risk else "")
+                ),
+                "detail": finding.mitigation or "",
+                "data": None,
+            },
+        ]
+
+        out.append(
+            {
+                "id": chain.id,
+                "title": chain.title,
+                "severity": chain.severity,
+                "owasp": chain.owasp_tags or [],
+                "verdict": finding.verdict,
+                "risk": _pct(risk.score if risk else 0),
+                "riskLevel": risk.risk_level if risk else "LOW",
+                "findingId": finding.id,
+                "findingTitle": finding.title,
+                "failedPhases": sum(1 for p in phases if p["status"] == PHASE_FAILED),
+                "phases": phases,
+            }
+        )
+    return out
+
+
 def _chain_nodes(chains, findings, risks) -> list[dict]:
     """Flatten the highest-severity chain's graph into ordered nodes."""
     if not chains:
@@ -437,16 +670,58 @@ def _chain_nodes(chains, findings, risks) -> list[dict]:
     return nodes
 
 
-def _timeline(events) -> list[dict]:
-    return [
-        {
-            "time": _time(e.created_at),
-            "label": e.event_type.replace("_", " ").title(),
-            "detail": (e.payload or {}).get("tool") or (e.payload or {}).get("model") or "",
-            "node": e.variant_id or "—",
-        }
-        for e in events[:40]
-    ]
+EVENT_LABEL = {
+    "llm_io": "Model answered",
+    "tool_call": "Privileged action ran",
+    "retrieval": "Documents retrieved",
+    "authz": "Authorization decision",
+}
+
+
+def _timeline(events, variants) -> list[dict]:
+    """Runtime events, told as what happened rather than as a type name.
+
+    The previous version emitted forty rows reading "Llm Io" at an identical
+    timestamp, which is noise. Each row now carries the probe that caused it and
+    what actually happened, and privileged actions are marked so they stand out
+    from ordinary traffic.
+    """
+    rows = []
+    for event in events:
+        payload = event.payload or {}
+        variant = variants.get(event.variant_id or "")
+        kind = event.event_type
+
+        if kind == "tool_call":
+            tool = payload.get("tool", "unknown")
+            args = payload.get("arguments") or {}
+            authorized = payload.get("authorized")
+            detail = f"{tool}({', '.join(f'{k}={v}' for k, v in args.items())})"
+            note = (
+                "within policy"
+                if authorized
+                else f"EXCEEDS POLICY (max {payload.get('max_authorized_percent')})"
+            )
+        elif kind == "llm_io":
+            detail = (payload.get("output") or "").strip().replace("\n", " ")[:140]
+            note = payload.get("model", "")
+        else:
+            detail = str(payload)[:140]
+            note = ""
+
+        rows.append(
+            {
+                "time": _time(event.created_at),
+                "label": EVENT_LABEL.get(kind, kind.replace("_", " ").title()),
+                "kind": kind,
+                "detail": detail,
+                "note": note,
+                "prompt": (variant.payload[:120] if variant else None),
+                "critical": kind == "tool_call" and payload.get("authorized") is False,
+            }
+        )
+    # Privileged actions first: they are the ones that changed state.
+    return sorted(rows, key=lambda r: (not r["critical"], r["kind"] != "tool_call"))[:60]
 
 
 def _risk_components(risks) -> list[dict]:

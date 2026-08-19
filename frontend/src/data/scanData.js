@@ -19,6 +19,9 @@ export const owaspCategories = scan.owaspCategories ?? []
 export const findings = scan.findings ?? []
 export const finding_detail = scan.finding_detail ?? {}
 export const attackChainNodes = scan.attackChainNodes ?? []
+// One ordered phase sequence per chain: what was wanted, how it was sent,
+// what each defence did, and what proves the outcome.
+export const attackChains = scan.attackChains ?? []
 export const attackTimeline = scan.attackTimeline ?? []
 export const riskComponents = scan.riskComponents ?? []
 export const evidenceItems = scan.evidenceItems ?? []
