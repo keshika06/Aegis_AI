@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json as jsonlib
 import shutil
+import socket
 import subprocess
 from pathlib import Path
 
@@ -19,6 +20,48 @@ from aegisai.dashboard.export import build
 from aegisai.models.scan import Scan
 
 app = typer.Typer(help="Export scan results to the web dashboard.")
+
+
+def _port_is_free(port: int) -> bool:
+    """True only if every address `localhost` resolves to accepts a bind.
+
+    Checking IPv4 alone is not enough: Vite's dev server binds `[::1]`, so an
+    IPv4-only probe reports a busy port as free and we advertise a URL nothing
+    is serving.
+    """
+    try:
+        candidates = socket.getaddrinfo("localhost", port, type=socket.SOCK_STREAM)
+    except socket.gaierror:  # pragma: no cover - localhost always resolves
+        candidates = [(socket.AF_INET, socket.SOCK_STREAM, 0, "", ("127.0.0.1", port))]
+
+    for family, socktype, proto, _canon, sockaddr in candidates:
+        # No SO_REUSEADDR: this is an availability probe, and the option exists
+        # to make binds succeed that otherwise would not.
+        with socket.socket(family, socktype, proto) as probe:
+            try:
+                probe.bind(sockaddr)
+            except OSError:
+                return False
+    return True
+
+
+def _resolve_port(requested: int, *, span: int = 20) -> int:
+    """Return the first free port at or after `requested`.
+
+    Vite falls back to the next free port on its own, but silently and *after*
+    we have already printed a URL -- so the address AegisAI advertises is the
+    one it asked for, not the one that ends up serving. Binding the choice here
+    means the printed URL is the real one, and `--strictPort` turns any
+    remaining drift into a loud failure instead of a wrong link.
+    """
+    for candidate in range(requested, requested + span):
+        if _port_is_free(candidate):
+            return candidate
+    raise AegisError(
+        f"No free port between {requested} and {requested + span - 1}.",
+        hint="Free one, or pick another with:  aegisai dashboard serve --port <n>",
+    )
+
 
 FRONTEND_DIR = Path(__file__).resolve().parents[3] / "frontend"
 DATA_FILE = FRONTEND_DIR / "src" / "data" / "scanData.json"
@@ -118,6 +161,14 @@ def serve_dashboard(
         if result.returncode != 0:
             raise AegisError("npm install failed.", hint="Run it manually to see the error.")
 
-    app_ctx.console.print(f"\n  [bold]Dashboard[/bold]  http://localhost:{port}")
+    bound = _resolve_port(port)
+    if bound != port:
+        output.warn(app_ctx, f"port {port} is in use — using {bound} instead")
+
+    app_ctx.console.print(f"\n  [bold]Dashboard[/bold]  http://localhost:{bound}")
     app_ctx.console.print("  [dim]Ctrl-C to stop[/dim]\n")
-    subprocess.run([npm, "run", "dev", "--", "--port", str(port)], cwd=FRONTEND_DIR, check=False)
+    subprocess.run(
+        [npm, "run", "dev", "--", "--port", str(bound), "--strictPort"],
+        cwd=FRONTEND_DIR,
+        check=False,
+    )
