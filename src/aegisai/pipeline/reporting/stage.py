@@ -18,6 +18,7 @@ from aegisai.models.enums import FindingVerdict, Stage
 from aegisai.models.execution import ControlEvaluation
 from aegisai.models.finding import Evidence, Finding
 from aegisai.pipeline.base import ScanContext, StageResult
+from aegisai.pipeline.orchestrator import metrics as evasion_metrics
 
 MAX_BODY_EXCERPT = 2000
 """Responses are truncated in the report; the full body stays in the database."""
@@ -63,6 +64,7 @@ def build_payload(ctx: ScanContext) -> dict:
             "control_results": control_counts,
             "findings": verdict_counts,
         },
+        "guardrail_evasion": evasion_metrics.compute(session, ctx.scan_id).as_dict(),
         "target_profile": {
             "endpoints": (ctx.profile.endpoints if ctx.profile else []),
             "capabilities": (ctx.profile.capabilities if ctx.profile else {}),

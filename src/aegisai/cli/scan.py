@@ -32,6 +32,11 @@ def run_scan(
     engines: str = typer.Option(
         "native", "--engines", help="Attack engines: native,garak,pyrit,promptfoo"
     ),
+    families: str | None = typer.Option(
+        None,
+        "--families",
+        help="Stage 2B evasion families: encoding,semantic,context,fragmentation,mutation",
+    ),
     fmt: str = typer.Option("json", "--format", help="Report formats to render."),
     json_: bool = JSON_OPTION,
 ) -> None:
@@ -42,6 +47,7 @@ def run_scan(
     app_ctx: AppContext = ctx.obj
     app_ctx.apply_json(json_)
     engine = app_ctx.engine()
+    family_list = [f.strip() for f in families.split(",") if f.strip()] if families else None
 
     # The authorization gate runs before anything else: an unauthorized target is
     # refused as unauthorized regardless of how much of the pipeline exists.
@@ -56,7 +62,7 @@ def run_scan(
             status=ScanStatus.PENDING,
             total_stages=TOTAL_PIPELINE_STAGES,
             engines={"requested": [e.strip() for e in engines.split(",") if e.strip()]},
-            config={"format": fmt},
+            config={"format": fmt, "families": family_list},
         )
         session.add(scan)
         session.flush()
@@ -74,6 +80,7 @@ def run_scan(
             target_url=target_url,
             target_id=target_id,
             target_type=target_type,
+            families=family_list,
         ):
             if not app_ctx.json_output and not app_ctx.quiet:
                 mark = "[green]✓[/green]" if progress.result.ok else "[yellow]![/yellow]"

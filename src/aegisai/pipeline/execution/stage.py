@@ -91,9 +91,7 @@ class ExecutionStage:
 
         counts: dict[str, int] = {}
         for variant in variants:
-            response = self.adapter.send(
-                ProbeRequest(url=url, json_body={text_key: variant.payload}, timeout=timeout)
-            )
+            response, sent = self._dispatch(variant, url, text_key, timeout)
             verdict, reason = classify(response)
             counts[verdict.name] = counts.get(verdict.name, 0) + 1
 
@@ -104,7 +102,7 @@ class ExecutionStage:
                     verdict=verdict,
                     verdict_reason=reason,
                     request_url=url,
-                    request_payload={text_key: variant.payload},
+                    request_payload=sent,
                     status_code=response.status_code,
                     response_headers=response.headers,
                     response_body=response.body,
@@ -116,3 +114,30 @@ class ExecutionStage:
 
         detail = " · ".join(f"{n} {k}" for k, n in sorted(counts.items()))
         return StageResult(ok=True, summary=f"{len(variants)} probe(s) — {detail}", counts=counts)
+
+    def _dispatch(
+        self, variant: AttackVariant, url: str, text_key: str, timeout: float
+    ) -> tuple[ProbeResponse, dict | list]:
+        """Send one variant, replaying a conversation turn by turn when present.
+
+        A fragmented attack is only meaningful if the turns arrive in order
+        against the same endpoint; the last response is what carries the result,
+        since that is the turn that completes the objective.
+        """
+        turns = variant.conversation
+        if not turns or len(turns) < 2:
+            body = {text_key: variant.payload}
+            return self.adapter.send(ProbeRequest(url=url, json_body=body, timeout=timeout)), body
+
+        sent: list[dict] = []
+        response: ProbeResponse | None = None
+        for turn in turns:
+            body = {text_key: turn.get("content", "")}
+            sent.append(body)
+            response = self.adapter.send(ProbeRequest(url=url, json_body=body, timeout=timeout))
+            if response.transport_failed:
+                # No point continuing a conversation the target stopped answering.
+                break
+
+        assert response is not None
+        return response, sent

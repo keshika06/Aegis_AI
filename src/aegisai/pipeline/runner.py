@@ -23,12 +23,14 @@ from aegisai.pipeline.base import ScanContext, StageResult
 from aegisai.pipeline.discovery.stage import DiscoveryStage
 from aegisai.pipeline.evidence.stage import EvidenceStage
 from aegisai.pipeline.execution.stage import ExecutionStage
+from aegisai.pipeline.orchestrator.stage import EvasionStage
 from aegisai.pipeline.planner.stage import PlannerStage
 from aegisai.pipeline.reporting.stage import ReportingStage
 
 STAGES: list[Callable[[], object]] = [
     DiscoveryStage,
     PlannerStage,
+    EvasionStage,
     ExecutionStage,
     EvidenceStage,
     ReportingStage,
@@ -58,6 +60,7 @@ def run_pipeline(
     target_url: str,
     target_id: str,
     target_type: str = "llm",
+    families: list[str] | None = None,
 ) -> Iterator[StageProgress]:
     """Execute the pipeline, yielding after each stage so callers can render live.
 
@@ -80,6 +83,7 @@ def run_pipeline(
         target_url=target_url,
         target_id=target_id,
         target_type=target_type,
+        families=families,
     )
 
     for index, stage_cls in enumerate(STAGES, start=1):

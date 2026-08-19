@@ -32,6 +32,9 @@ class ScanContext:
     target_type: str = "llm"
     """Discovered shape of the target; selects which attack cases apply."""
 
+    families: list[str] | None = None
+    """Stage 2B transformation families to generate. None means the defaults."""
+
     profile: Profile | None = None
 
 
