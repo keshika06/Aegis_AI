@@ -34,6 +34,9 @@ REFUSAL_MARKERS = (
 
 BLOCK_MARKERS = ("blocked", "forbidden", "policy violation", "request rejected", "not permitted")
 
+PROBE_HEADER = "X-Aegis-Probe-Id"
+"""Correlation header. An instrumented target echoes it on emitted events."""
+
 
 def classify(response: ProbeResponse) -> tuple[ControlVerdict, str]:
     """Map a raw response to the Stage 3/4 outcome vocabulary.
@@ -124,17 +127,24 @@ class ExecutionStage:
         against the same endpoint; the last response is what carries the result,
         since that is the turn that completes the objective.
         """
+        # Instrumented targets echo this back on the events they emit, which is
+        # how Stage 5 attributes downstream behaviour to the probe that caused it.
+        headers = {PROBE_HEADER: variant.id}
+
         turns = variant.conversation
         if not turns or len(turns) < 2:
             body = {text_key: variant.payload}
-            return self.adapter.send(ProbeRequest(url=url, json_body=body, timeout=timeout)), body
+            request = ProbeRequest(url=url, json_body=body, timeout=timeout, headers=headers)
+            return self.adapter.send(request), body
 
         sent: list[dict] = []
         response: ProbeResponse | None = None
         for turn in turns:
             body = {text_key: turn.get("content", "")}
             sent.append(body)
-            response = self.adapter.send(ProbeRequest(url=url, json_body=body, timeout=timeout))
+            response = self.adapter.send(
+                ProbeRequest(url=url, json_body=body, timeout=timeout, headers=headers)
+            )
             if response.transport_failed:
                 # No point continuing a conversation the target stopped answering.
                 break

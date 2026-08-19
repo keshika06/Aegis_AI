@@ -23,6 +23,8 @@ from aegisai.pipeline.base import ScanContext, StageResult
 from aegisai.pipeline.discovery.stage import DiscoveryStage
 from aegisai.pipeline.evidence.stage import EvidenceStage
 from aegisai.pipeline.execution.stage import ExecutionStage
+from aegisai.pipeline.expected_observed.stage import ExpectedObservedStage
+from aegisai.pipeline.observability.stage import ObservabilityStage
 from aegisai.pipeline.orchestrator.stage import EvasionStage
 from aegisai.pipeline.planner.stage import PlannerStage
 from aegisai.pipeline.reporting.stage import ReportingStage
@@ -32,6 +34,8 @@ STAGES: list[Callable[[], object]] = [
     PlannerStage,
     EvasionStage,
     ExecutionStage,
+    ObservabilityStage,
+    ExpectedObservedStage,
     EvidenceStage,
     ReportingStage,
 ]

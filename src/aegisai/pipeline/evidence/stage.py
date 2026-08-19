@@ -25,6 +25,7 @@ from aegisai.models.enums import (
 )
 from aegisai.models.execution import ControlEvaluation
 from aegisai.models.finding import Evidence, Finding
+from aegisai.models.policy import Violation
 from aegisai.pipeline.base import ScanContext, StageResult
 from aegisai.pipeline.evidence.canary import find_canaries
 
@@ -81,6 +82,12 @@ class EvidenceStage:
             )
         )
 
+        violations_by_variant: dict[str, list[Violation]] = {}
+        for violation in ctx.session.scalars(
+            select(Violation).where(Violation.scan_id == ctx.scan_id)
+        ):
+            violations_by_variant.setdefault(violation.variant_id or "", []).append(violation)
+
         counts: dict[str, int] = {}
         for evaluation in evaluations:
             # Only probes the target accepted can have produced impact. A rejected
@@ -90,7 +97,9 @@ class EvidenceStage:
 
             variant = ctx.session.get(AttackVariant, evaluation.variant_id)
             case = ctx.session.get(AttackCase, variant.attack_case_id) if variant else None
-            signals = self._collect(evaluation, case)
+            signals = self._collect(
+                evaluation, case, violations_by_variant.get(evaluation.variant_id, [])
+            )
             if not signals:
                 continue
 
@@ -133,9 +142,31 @@ class EvidenceStage:
         detail = " · ".join(f"{n} {k}" for k, n in sorted(counts.items())) or "no findings"
         return StageResult(ok=True, summary=detail, counts={**counts, "findings": total})
 
-    def _collect(self, evaluation: ControlEvaluation, case: AttackCase | None) -> list[Signal]:
+    def _collect(
+        self,
+        evaluation: ControlEvaluation,
+        case: AttackCase | None,
+        violations: list[Violation] | None = None,
+    ) -> list[Signal]:
         signals: list[Signal] = []
         body = evaluation.response_body or ""
+
+        # A declared boundary, measured against behaviour the target itself
+        # reported, is the strongest evidence short of a canary.
+        for violation in violations or []:
+            signals.append(
+                Signal(
+                    EvidenceType.POLICY_VIOLATION,
+                    f"Policy boundary '{violation.boundary}' violated: {violation.observed}",
+                    {
+                        "boundary": violation.boundary,
+                        "rule": violation.rule,
+                        "expected": violation.expected,
+                        "observed": violation.observed,
+                        **(violation.detail or {}),
+                    },
+                )
+            )
 
         if canaries := find_canaries(body):
             signals.append(
