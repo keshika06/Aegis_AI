@@ -29,6 +29,9 @@ class ScanContext:
     config: Config
     target_url: str
     target_id: str
+    target_type: str = "llm"
+    """Discovered shape of the target; selects which attack cases apply."""
+
     profile: Profile | None = None
 
 

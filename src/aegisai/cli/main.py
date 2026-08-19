@@ -153,6 +153,7 @@ def discover_command(
             config=app_ctx.config,
             target_url=target_row.url,
             target_id=target_row.id,
+            target_type=target_row.target_type,
         )
         result = DiscoveryStage().run(scan_ctx)
 

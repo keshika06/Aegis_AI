@@ -57,6 +57,7 @@ def run_pipeline(
     config: Config,
     target_url: str,
     target_id: str,
+    target_type: str = "llm",
 ) -> Iterator[StageProgress]:
     """Execute the pipeline, yielding after each stage so callers can render live.
 
@@ -78,6 +79,7 @@ def run_pipeline(
         config=config,
         target_url=target_url,
         target_id=target_id,
+        target_type=target_type,
     )
 
     for index, stage_cls in enumerate(STAGES, start=1):

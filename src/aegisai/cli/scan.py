@@ -48,6 +48,7 @@ def run_scan(
     with session_scope(engine) as session:
         target_row = require_authorized(session, target)
         target_url, target_id = target_row.url, target_row.id
+        target_type = target_row.target_type
 
         scan = Scan(
             target_id=target_id,
@@ -72,6 +73,7 @@ def run_scan(
             config=app_ctx.config,
             target_url=target_url,
             target_id=target_id,
+            target_type=target_type,
         ):
             if not app_ctx.json_output and not app_ctx.quiet:
                 mark = "[green]✓[/green]" if progress.result.ok else "[yellow]![/yellow]"

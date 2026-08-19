@@ -1,0 +1,47 @@
+# OWASP Top 10 for LLM Applications (2025), used for reporting alignment.
+#
+# A category is attached to a finding only where the evidence actually supports
+# it. An OWASP tag is never forced onto a finding that does not fit.
+
+LLM01:
+  name: Prompt Injection
+  description: >-
+    User or embedded content alters the model's instructions, changing its
+    behaviour in ways the application did not intend.
+LLM02:
+  name: Sensitive Information Disclosure
+  description: >-
+    The model reveals confidential data — credentials, personal data, or
+    privileged context it was given.
+LLM03:
+  name: Supply Chain
+  description: Compromised models, datasets, plugins, or dependencies.
+LLM04:
+  name: Data and Model Poisoning
+  description: Training or retrieval data manipulated to change model behaviour.
+LLM05:
+  name: Improper Output Handling
+  description: >-
+    Model output is passed to a downstream sink without validation, enabling
+    injection into that sink (HTML, SQL, a shell, a template).
+LLM06:
+  name: Excessive Agency
+  description: >-
+    The model takes actions beyond what the task required, via over-broad tool
+    or permission grants.
+LLM07:
+  name: System Prompt Leakage
+  description: >-
+    The system prompt is disclosed, exposing instructions, guardrails, or
+    secrets that were assumed hidden.
+LLM08:
+  name: Vector and Embedding Weaknesses
+  description: Weaknesses in retrieval, embeddings, or vector stores.
+LLM09:
+  name: Misinformation
+  description: Confident, incorrect output that a user is likely to act upon.
+LLM10:
+  name: Unbounded Consumption
+  description: >-
+    Uncontrolled resource use. Out of scope for AegisAI, which does not perform
+    denial-of-service testing.
