@@ -7,7 +7,7 @@ the target you point it at.
 
 ## 0. One-time setup
 
-From the repo root (`/Users/keshikachandru/Aegis AI`):
+From the repo root:
 
 ```bash
 python3 -m venv .venv
