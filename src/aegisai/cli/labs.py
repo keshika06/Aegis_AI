@@ -19,7 +19,23 @@ from aegisai.core.exceptions import AegisError, EnvironmentError_
 
 app = typer.Typer(help="Start and stop the bundled vulnerable demo labs.")
 
-LABS = {"lab1": {"port": 8001, "description": "Vulnerable LLM chatbot"}}
+LABS = {
+    "lab1": {
+        "port": 8001,
+        "description": "Vulnerable LLM chatbot",
+        # The type to register the target as. It is not bookkeeping: it selects
+        # which attack cases the planner draws and which expected-behaviour
+        # contract Stage 6 loads, so registering a lab as the wrong type makes
+        # it scan clean for the wrong reason. Surfaced here so the right value
+        # is in front of whoever is about to register it.
+        "target_type": "chatbot",
+    },
+    "lab2": {
+        "port": 8002,
+        "description": "Vulnerable RAG knowledge assistant",
+        "target_type": "rag",
+    },
+}
 
 
 def _compose_file(ctx: AppContext) -> Path:
@@ -78,7 +94,7 @@ def _selected(lab: str) -> list[str]:
 @app.command("up")
 def labs_up(
     ctx: typer.Context,
-    lab: str = typer.Argument("all", help="lab1 | all"),
+    lab: str = typer.Argument("all", help="lab1 | lab2 | all"),
     json_: bool = JSON_OPTION,
 ) -> None:
     """Start the vulnerable labs and wait until they actually answer."""
@@ -115,7 +131,7 @@ def labs_up(
 @app.command("down")
 def labs_down(
     ctx: typer.Context,
-    lab: str = typer.Argument("all", help="lab1 | all"),
+    lab: str = typer.Argument("all", help="lab1 | lab2 | all"),
     json_: bool = JSON_OPTION,
 ) -> None:
     """Stop the vulnerable labs."""
@@ -143,6 +159,7 @@ def labs_status(ctx: typer.Context, json_: bool = JSON_OPTION) -> None:
             "lab": name,
             "port": meta["port"],
             "description": meta["description"],
+            "target_type": meta["target_type"],
             "healthy": _healthy(meta["port"]),
             "url": f"http://localhost:{meta['port']}",
         }
@@ -155,10 +172,26 @@ def labs_status(ctx: typer.Context, json_: bool = JSON_OPTION) -> None:
                 item["lab"],
                 item["description"],
                 item["url"],
+                item["target_type"],
                 "[green]healthy[/green]" if item["healthy"] else "[dim]stopped[/dim]",
             )
             for item in payload
         ]
-        app_ctx.console.print(output.build_table(["LAB", "DESCRIPTION", "URL", "STATE"], rows))
+        app_ctx.console.print(
+            output.build_table(["LAB", "DESCRIPTION", "URL", "TYPE", "STATE"], rows)
+        )
+
+        # Scanning a lab takes two commands and one easily-wrong flag. Printing
+        # them for whichever labs are actually answering removes the guesswork
+        # about which target type goes with which lab.
+        running = [item for item in payload if item["healthy"]]
+        if running:
+            app_ctx.console.print("\n[dim]To scan:[/dim]")
+            for item in running:
+                app_ctx.console.print(
+                    f"  [dim]aegisai target add {item['url']} "
+                    f"--type {item['target_type']} --authorize[/dim]"
+                )
+                app_ctx.console.print(f"  [dim]aegisai scan run {item['url']}[/dim]")
 
     output.emit(app_ctx, payload, render)

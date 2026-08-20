@@ -18,10 +18,20 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+# What the bundled labs need to run natively. They are separate from the core
+# dependencies because scanning a target never requires them — only hosting one
+# does — but they are pulled into `dev` so a contributor who installs the dev
+# extra can run the labs and the tests that import them without a second step.
+labs = [
+    "fastapi>=0.110",
+    "uvicorn>=0.27",
+]
+
 dev = [
     "pytest>=8.0",
     "pytest-asyncio>=0.23",
     "ruff>=0.5",
+    "aegisai[labs]",
 ]
 
 [project.scripts]

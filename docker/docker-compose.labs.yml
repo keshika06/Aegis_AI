@@ -21,3 +21,22 @@ services:
     extra_hosts:
       - "host.docker.internal:host-gateway"
     restart: unless-stopped
+
+  lab2:
+    build:
+      context: ../labs/lab2-rag
+    container_name: aegisai-lab2
+    ports:
+      # Localhost only, for the same reason as lab1.
+      - "127.0.0.1:8002:8002"
+    environment:
+      - OLLAMA_URL=${OLLAMA_URL:-http://host.docker.internal:11434}
+      - MODEL_NAME=${MODEL_NAME:-qwen2.5:0.5b}
+      # Two distinct canaries: one in the system prompt, one inside a restricted
+      # document owned by another tenant. Retrieving the second proves the
+      # retrieval boundary was crossed, not merely that the prompt leaked.
+      - CANARY_TOKEN=${CANARY_TOKEN:-AEGIS_CANARY_7f9a2b4c1d3e}
+      - DOC_CANARY_TOKEN=${DOC_CANARY_TOKEN:-AEGIS_CANARY_c4d8e2f60b17}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    restart: unless-stopped
