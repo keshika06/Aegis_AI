@@ -1,16 +1,35 @@
 import { useState } from 'react'
-import { BarChart, Bar as RBar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Cell } from 'recharts'
+import {
+  BarChart, Bar as RBar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Cell,
+  ScatterChart, Scatter, ZAxis, ReferenceLine
+} from 'recharts'
 import { PageHeader, Panel } from '../components/Panel'
 import SeverityBadge from '../components/SeverityBadge'
 import {
   factorContributions, contributionFinal, unestablishedFactors, finding_detail,
-  contributionLikelihood, contributionImpact, contributionConfidence, contributionArithmetic
+  contributionLikelihood, contributionImpact, contributionConfidence, contributionArithmetic,
+  findings, severityColor
 } from '../data/scanData'
 
 const AXIS = {
   likelihood: { label: 'Likelihood', color: '#f97316', blurb: 'How readily an attacker walks this path again.' },
   impact: { label: 'Impact', color: '#ef4444', blurb: 'What it costs when they do.' }
 }
+
+// Every finding placed on the two axes the score multiplies. Both coordinates
+// are the finding's own measured axis values, not a stand-in derived from the
+// composite they already produced — so distance from the origin *is* the score,
+// and the two ways of being dangerous separate visually.
+const matrixData = findings
+  .filter((f) => typeof f.likelihood === 'number' && typeof f.impact === 'number')
+  .map((f) => ({
+    likelihood: Number((f.likelihood * 10).toFixed(1)),
+    impact: Number((f.impact * 10).toFixed(1)),
+    z: f.risk,
+    id: f.id,
+    title: f.title,
+    color: (severityColor[f.severity] ?? severityColor.NEUTRAL).text
+  }))
 
 export default function Explainability() {
   const [active, setActive] = useState(factorContributions[0] ?? null)
@@ -120,6 +139,43 @@ export default function Explainability() {
           ))}
         </div>
       </Panel>
+
+      {matrixData.length > 0 && (
+        <Panel title={`Every finding on the two axes — ${matrixData.length} scored`} className="mb-5">
+          <p className="text-[12px] text-slate-500 mb-3">
+            Position is the finding's own measured likelihood and impact, so distance from the
+            origin is its score. The two ways of being dangerous separate here: top-left is severe
+            but hard to reach, bottom-right is trivially reachable but cheap. Only the top-right
+            corner is both.
+          </p>
+          <ResponsiveContainer width="100%" height={300}>
+            <ScatterChart margin={{ top: 10, right: 20, bottom: 20, left: -10 }}>
+              <CartesianGrid stroke="#232b3d" />
+              <XAxis
+                type="number" dataKey="likelihood" name="Likelihood" domain={[0, 10]}
+                tick={{ fill: '#7c8aab', fontSize: 11 }} axisLine={{ stroke: '#232b3d' }}
+                label={{ value: 'Likelihood →', position: 'insideBottom', offset: -10, fill: '#7c8aab', fontSize: 11 }}
+              />
+              <YAxis
+                type="number" dataKey="impact" name="Impact" domain={[0, 10]}
+                tick={{ fill: '#7c8aab', fontSize: 11 }} axisLine={{ stroke: '#232b3d' }}
+                label={{ value: 'Impact →', angle: -90, position: 'insideLeft', fill: '#7c8aab', fontSize: 11 }}
+              />
+              <ZAxis type="number" dataKey="z" range={[60, 300]} />
+              <ReferenceLine x={5} stroke="#2a3348" strokeDasharray="3 3" />
+              <ReferenceLine y={5} stroke="#2a3348" strokeDasharray="3 3" />
+              <Tooltip
+                cursor={{ strokeDasharray: '3 3' }}
+                contentStyle={{ background: '#131a29', border: '1px solid #232b3d', borderRadius: 8, fontSize: 12 }}
+                formatter={(v, n, p) => [`${p.payload.id} — ${p.payload.title}`, `L ${p.payload.likelihood} · I ${p.payload.impact} · risk ${p.payload.z}`]}
+              />
+              <Scatter data={matrixData}>
+                {matrixData.map((d, i) => <Cell key={i} fill={d.color} fillOpacity={0.8} />)}
+              </Scatter>
+            </ScatterChart>
+          </ResponsiveContainer>
+        </Panel>
+      )}
 
       {unestablishedFactors.length > 0 && (
         <Panel title="Factors not established">

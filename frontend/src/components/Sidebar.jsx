@@ -1,7 +1,7 @@
 import { NavLink } from 'react-router-dom'
 import {
   ShieldHalf, LayoutGrid, GitBranch, Crosshair, Grid3x3,
-  BarChart3, SearchCode, FileStack, ShieldCheck, TrendingUp,
+  SearchCode, FileStack, ShieldCheck, TrendingUp,
   FileText, CircleDot
 } from 'lucide-react'
 import { run, findings, dataSource } from '../data/scanData'
@@ -11,8 +11,7 @@ const nav = [
   { to: '/attack-chain', label: 'Attack Chain', icon: GitBranch },
   { to: '/findings', label: 'Findings', icon: Crosshair, badge: findings.length },
   { to: '/owasp-mapping', label: 'OWASP Mapping', icon: Grid3x3 },
-  { to: '/risk-analysis', label: 'Risk Analysis', icon: BarChart3 },
-  { to: '/explainability', label: 'Explainability', icon: SearchCode },
+  { to: '/explainability', label: 'Risk Attribution', icon: SearchCode },
   { to: '/evidence', label: 'Evidence', icon: FileStack },
   { to: '/security-controls', label: 'Security Controls', icon: ShieldCheck },
   { to: '/trends', label: 'Trends', icon: TrendingUp },

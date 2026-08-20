@@ -5,7 +5,6 @@ import AttackChain from './pages/AttackChain'
 import Findings from './pages/Findings'
 import FindingDetail from './pages/FindingDetail'
 import OwaspMapping from './pages/OwaspMapping'
-import RiskAnalysis from './pages/RiskAnalysis'
 import Explainability from './pages/Explainability'
 import Evidence from './pages/Evidence'
 import SecurityControls from './pages/SecurityControls'
@@ -26,7 +25,11 @@ export default function App() {
         <Route path="/findings" element={<Findings />} />
         <Route path="/findings/:id" element={<FindingDetail />} />
         <Route path="/owasp-mapping" element={<OwaspMapping />} />
-        <Route path="/risk-analysis" element={<RiskAnalysis />} />
+        {/* Risk Analysis duplicated the Dashboard's gauge, factor bars, severity
+            donut and baseline comparison. Its one original panel — every finding
+            plotted on the likelihood and impact axes — moved to Explainability,
+            beside the model it visualises. */}
+        <Route path="/risk-analysis" element={<Navigate to="/explainability" replace />} />
         <Route path="/explainability" element={<Explainability />} />
         <Route path="/evidence" element={<Evidence />} />
         <Route path="/security-controls" element={<SecurityControls />} />
