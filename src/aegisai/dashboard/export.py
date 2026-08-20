@@ -28,7 +28,7 @@ from sqlalchemy.orm import Session
 from aegisai.knowledge_base.library import load_owasp_taxonomy, owasp_name
 from aegisai.models.analysis import AttackChain, RiskScore
 from aegisai.models.attack import AttackCase, AttackVariant
-from aegisai.models.enums import ControlVerdict, FindingVerdict, RegressionStatus
+from aegisai.models.enums import ControlVerdict, FindingVerdict, RegressionStatus, RiskLevel
 from aegisai.models.execution import ControlEvaluation
 from aegisai.models.finding import Evidence, Finding
 from aegisai.models.policy import Violation
@@ -37,6 +37,13 @@ from aegisai.models.runtime import RuntimeEvent
 from aegisai.models.scan import Profile, Scan
 from aegisai.models.target import Target
 from aegisai.pipeline.orchestrator import metrics as evasion_metrics
+from aegisai.pipeline.risk.scoring import (
+    IMPACT_WEIGHTS,
+    LIKELIHOOD_WEIGHTS,
+    RISK_MODEL_VERSION,
+    THRESHOLDS,
+    posture,
+)
 
 SEVERITY_BY_LEVEL = {"CRITICAL": "CRITICAL", "HIGH": "HIGH", "MEDIUM": "MEDIUM", "LOW": "LOW"}
 
@@ -111,8 +118,9 @@ def build(session: Session, scan_id: str) -> dict[str, Any]:
         if risk:
             severity_counts[risk.risk_level] = severity_counts.get(risk.risk_level, 0) + 1
 
-    top_risk = max((r.score for r in risks.values()), default=0.0)
+    posture_score = _posture_of(session, scan_id)
     confirmed = [f for f in findings if f.verdict == FindingVerdict.CONFIRMED]
+    details = _details(findings, risks, evidence_by_finding, variants, cases, violations)
 
     return {
         "meta": {
@@ -138,18 +146,18 @@ def build(session: Session, scan_id: str) -> dict[str, Any]:
             findings,
             confirmed,
             severity_counts,
-            top_risk,
+            posture_score,
             metrics,
             chains,
             evidence,
-            cases,
         ),
         "riskRuns": _risk_runs(session, scan),
-        "owaspCategories": _owasp(findings, risks, evidence_by_finding, chains),
-        "findings": _findings(findings, risks, evidence_by_finding, variants, cases),
-        "finding_detail": _detail(
-            findings, risks, evidence_by_finding, variants, cases, violations
+        "owaspCategories": _owasp(
+            findings, risks, evidence_by_finding, chains, _previous_owasp_tags(session, scan)
         ),
+        "findings": _findings(findings, risks, evidence_by_finding, variants, cases),
+        "findingDetails": details,
+        "finding_detail": _top_detail(details, findings, risks),
         "attackChainNodes": _chain_nodes(chains, findings, risks),
         "attackChains": _chains(
             chains,
@@ -197,11 +205,29 @@ def build(session: Session, scan_id: str) -> dict[str, Any]:
     }
 
 
+def _is_comparable(session: Session, scan_id: str) -> bool:
+    """Whether this scan's scores came from the risk model in force today.
+
+    A score from an older model is a different measurement. Putting one on the
+    same trend line as a current score would show a change in the formula as a
+    change in the target's security — reporting an improvement that never
+    happened.
+    """
+    versions = set(
+        session.scalars(select(RiskScore.model_version).where(RiskScore.scan_id == scan_id))
+    )
+    return bool(versions) and versions == {RISK_MODEL_VERSION}
+
+
 def _previous_scan(session: Session, scan: Scan) -> Scan | None:
-    """The scan immediately before this one, against the same target."""
+    """The most recent earlier scan of this target that is comparable to it.
+
+    Skips scans scored under a superseded risk model rather than silently
+    comparing against them.
+    """
     if not scan.target_id or not scan.created_at:
         return None
-    return session.scalar(
+    candidates = session.scalars(
         select(Scan)
         .where(
             Scan.target_id == scan.target_id,
@@ -210,45 +236,92 @@ def _previous_scan(session: Session, scan: Scan) -> Scan | None:
         )
         .order_by(Scan.created_at.desc())
     )
+    for candidate in candidates:
+        if _is_comparable(session, candidate.id):
+            return candidate
+    return None
 
 
-def _top_risk_of(session: Session, scan_id: str) -> float:
-    scores = session.scalars(select(RiskScore.score).where(RiskScore.scan_id == scan_id))
-    return max(scores, default=0.0)
+def _best_score_per_objective(session: Session, scan_id: str) -> dict[str, float]:
+    """The highest score each attack objective reached in this scan.
+
+    Keyed by attack case, so twelve representations of one weakness collapse to
+    the one weakness they all probe. Findings that cannot be traced back to a
+    case keep their own key rather than being dropped — an unattributed finding
+    is still a finding.
+    """
+    case_by_variant = {
+        v.id: v.attack_case_id
+        for v in session.scalars(select(AttackVariant).where(AttackVariant.scan_id == scan_id))
+    }
+    variant_by_finding = {
+        f.id: f.variant_id
+        for f in session.scalars(select(Finding).where(Finding.scan_id == scan_id))
+    }
+
+    best: dict[str, float] = {}
+    for risk in session.scalars(select(RiskScore).where(RiskScore.scan_id == scan_id)):
+        variant_id = variant_by_finding.get(risk.finding_id or "")
+        key = case_by_variant.get(variant_id or "") or f"unattributed:{risk.finding_id}"
+        best[key] = max(best.get(key, 0.0), risk.score)
+    return best
+
+
+def _posture_of(session: Session, scan_id: str) -> int:
+    """The 0-100 posture score for a scan."""
+    return posture(_best_score_per_objective(session, scan_id)).score
+
+
+def _band(posture_score: int) -> str:
+    """The risk level a 0-100 posture score falls in.
+
+    Uses the same thresholds as a finding's score, so "72/100" and the label
+    beside it cannot disagree.
+    """
+    for threshold, level in THRESHOLDS:
+        if posture_score >= threshold * 10:
+            return level.value
+    return RiskLevel.LOW.value
+
+
+def _confirmed_objectives(session: Session, scan_id: str) -> int:
+    """Distinct attack objectives that produced at least one confirmed finding.
+
+    Counting confirmed *findings* here instead reported 130 successes against 27
+    objectives — 481%, because one objective probed a dozen ways yields a dozen
+    findings. A success rate that can exceed 100% is not a rate.
+    """
+    case_by_variant = {
+        v.id: v.attack_case_id
+        for v in session.scalars(select(AttackVariant).where(AttackVariant.scan_id == scan_id))
+    }
+    cases: set[str] = set()
+    for finding in session.scalars(select(Finding).where(Finding.scan_id == scan_id)):
+        if finding.verdict != FindingVerdict.CONFIRMED:
+            continue
+        case_id = case_by_variant.get(finding.variant_id or "")
+        cases.add(case_id or f"unattributed:{finding.id}")
+    return len(cases)
+
+
+def _success_rate(session: Session, scan_id: str) -> int | None:
+    """Confirmed objectives over objectives attempted, as a percentage."""
+    attempted = len(
+        list(session.scalars(select(AttackCase.id).where(AttackCase.scan_id == scan_id)))
+    )
+    if not attempted:
+        return None
+    return int(round(_confirmed_objectives(session, scan_id) / attempted * 100))
 
 
 def _run(
-    session, scan, target, findings, confirmed, severity, top_risk, metrics, chains, evidence, cases
+    session, scan, target, findings, confirmed, severity, posture_score, metrics, chains, evidence
 ) -> dict:
-    # Attack success is confirmed objectives over objectives attempted — a rate
-    # over probes would flatter the result, since one objective can be probed a
-    # dozen ways.
-    attempted = len(cases) or 1
-    success_rate = int(round(len(confirmed) / attempted * 100))
+    success_rate = _success_rate(session, scan.id)
 
     previous = _previous_scan(session, scan)
-    previous_risk = _pct(_top_risk_of(session, previous.id)) if previous else None
-    previous_confirmed = (
-        len(
-            [
-                f
-                for f in session.scalars(select(Finding).where(Finding.scan_id == previous.id))
-                if f.verdict == FindingVerdict.CONFIRMED
-            ]
-        )
-        if previous
-        else None
-    )
-    previous_cases = (
-        len(list(session.scalars(select(AttackCase).where(AttackCase.scan_id == previous.id))))
-        if previous
-        else 0
-    )
-    previous_rate = (
-        int(round(previous_confirmed / (previous_cases or 1) * 100))
-        if previous_confirmed is not None
-        else None
-    )
+    previous_risk = _posture_of(session, previous.id) if previous else None
+    previous_rate = _success_rate(session, previous.id) if previous else None
 
     # Confidence of the evidence actually relied upon. Averaging in the weak
     # signals would understate how solid the confirmed findings are.
@@ -270,23 +343,23 @@ def _run(
         # renders a dash rather than inventing a baseline.
         "previousRisk": previous_risk,
         "attackSuccessRate": success_rate,
-        "attackSuccessDelta": (success_rate - previous_rate) if previous_rate is not None else None,
+        "attackSuccessDelta": (
+            (success_rate - previous_rate)
+            if previous_rate is not None and success_rate is not None
+            else None
+        ),
         "evidenceConfidence": confidence,
         "id": _short(scan.id, "RUN"),
         "scanId": scan.id,
         "target": target.url if target else "unknown",
         "targetType": target.target_type if target else "—",
         "status": scan.status.title() if scan.status else "Unknown",
-        "risk": _pct(top_risk),
-        "severity": (
-            "CRITICAL"
-            if severity.get("CRITICAL")
-            else "HIGH"
-            if severity.get("HIGH")
-            else "MEDIUM"
-            if severity.get("MEDIUM")
-            else "LOW"
-        ),
+        "risk": posture_score,
+        # The band of the posture score itself, not of the worst single
+        # finding. The gauge renders this label directly under that number, and
+        # a label describing a different quantity than the figure it sits under
+        # is how a reader ends up with the wrong impression of both.
+        "severity": _band(posture_score),
         "date": scan.created_at.strftime("%b %d, %Y") if scan.created_at else "—",
         "time": scan.created_at.strftime("%H:%M:%S") if scan.created_at else "—",
         "totalFindings": len(findings),
@@ -308,15 +381,22 @@ def _run(
 
 
 def _risk_runs(session: Session, scan: Scan) -> list[dict]:
-    """Recent scans of the same target, oldest first, for the trend chart."""
-    history = list(
-        session.scalars(
+    """Recent scans of the same target, oldest first, for the trend chart.
+
+    Only scans scored by the current risk model appear. A superseded model's
+    scores are real, but they are a different measurement, and a line through
+    both would read as the target changing when only the formula did.
+    """
+    history = [
+        item
+        for item in session.scalars(
             select(Scan)
             .where(Scan.target_id == scan.target_id)
             .order_by(Scan.created_at.desc())
-            .limit(8)
+            .limit(16)
         )
-    )
+        if _is_comparable(session, item.id)
+    ][:8]
     rows = []
     for item in reversed(history):
         scores = list(session.scalars(select(RiskScore).where(RiskScore.scan_id == item.id)))
@@ -324,7 +404,7 @@ def _risk_runs(session: Session, scan: Scan) -> list[dict]:
         rows.append(
             {
                 "run": _short(item.id, "RUN"),
-                "risk": _pct(max((s.score for s in scores), default=0.0)),
+                "risk": _posture_of(session, item.id),
                 "critical": sum(1 for s in scores if s.risk_level == "CRITICAL"),
                 "high": sum(1 for s in scores if s.risk_level == "HIGH"),
                 "confirmed": sum(1 for f in findings if f.verdict == FindingVerdict.CONFIRMED),
@@ -334,7 +414,24 @@ def _risk_runs(session: Session, scan: Scan) -> list[dict]:
     return rows
 
 
-def _owasp(findings, risks, evidence_by_finding, chains) -> list[dict]:
+def _previous_owasp_tags(session: Session, scan: Scan) -> set[str] | None:
+    """OWASP tags seen in the previous scan of this target.
+
+    None where there is no previous scan, which the UI has to distinguish from
+    an empty set: "nothing was found before" and "we have never looked before"
+    are different claims, and only one of them makes a category *new*.
+    """
+    previous = _previous_scan(session, scan)
+    if previous is None:
+        return None
+    return {
+        f.owasp_tag
+        for f in session.scalars(select(Finding).where(Finding.scan_id == previous.id))
+        if f.owasp_tag
+    }
+
+
+def _owasp(findings, risks, evidence_by_finding, chains, previous_tags) -> list[dict]:
     taxonomy = load_owasp_taxonomy()
     by_tag: dict[str, list[Finding]] = {}
     for finding in findings:
@@ -368,9 +465,33 @@ def _owasp(findings, risks, evidence_by_finding, chains) -> list[dict]:
                 "evidence": sum(len(evidence_by_finding.get(f.id, [])) for f in group),
                 "chains": chain_tags.get(tag, 0),
                 "status": "OPEN" if group else "CLEAR",
+                # None where there is no previous scan: without a baseline,
+                # nothing can be called newly detected.
+                "isNew": (bool(group) and tag not in previous_tags)
+                if previous_tags is not None
+                else None,
             }
         )
     return rows
+
+
+def _axis_value(risk, axis_weights) -> float | None:
+    """One axis of a stored risk score, recomputed from its recorded factors.
+
+    None when nothing on the axis was established — the caller must not plot a
+    point whose position it had to invent.
+    """
+    if risk is None:
+        return None
+    present = {
+        k: float(v)
+        for k, v in (risk.factors or {}).items()
+        if k in axis_weights and isinstance(v, (int, float))
+    }
+    total = sum(axis_weights[k] for k in present)
+    if not total:
+        return None
+    return round(sum(axis_weights[k] * v for k, v in present.items()) / total, 3)
 
 
 def _findings(findings, risks, evidence_by_finding, variants, cases) -> list[dict]:
@@ -387,12 +508,22 @@ def _findings(findings, risks, evidence_by_finding, variants, cases) -> list[dic
                 "owasp": finding.owasp_tag or "—",
                 "severity": risk.risk_level if risk else "LOW",
                 "risk": _pct(risk.score if risk else 0),
+                # The two axes the score multiplies, so an impact/likelihood
+                # plot can show where a finding actually sits rather than
+                # deriving one axis from the composite it already produced.
+                "likelihood": _axis_value(risk, LIKELIHOOD_WEIGHTS),
+                "impact": _axis_value(risk, IMPACT_WEIGHTS),
                 "confidence": int(round((finding.confidence or 0) * 100)),
                 "verdict": finding.verdict,
-                "attackType": (case.category if case else "—").replace("_", " ").title(),
+                # category is nullable, so a case without one must not be
+                # treated as the string it is not.
+                "attackType": ((case.category if case else None) or "—").replace("_", " ").title(),
                 "transformation": variant.transformation if variant else "none",
                 "evidence": len(evidence_by_finding.get(finding.id, [])),
-                "status": "OPEN",
+                # No "status" field: AegisAI has no concept of a finding being
+                # triaged or closed, so every row carried a constant "OPEN" that
+                # looked like workflow state and tracked nothing. `verdict` is
+                # the real, measured disposition.
                 "lastSeen": (
                     finding.created_at.strftime("%Y-%m-%d %H:%M") if finding.created_at else "—"
                 ),
@@ -401,45 +532,84 @@ def _findings(findings, risks, evidence_by_finding, variants, cases) -> list[dic
     return sorted(rows, key=lambda r: r["risk"], reverse=True)
 
 
-def _detail(findings, risks, evidence_by_finding, variants, cases, violations) -> dict:
-    """The single highest-risk finding, for the detail page."""
+def _details(findings, risks, evidence_by_finding, variants, cases, violations) -> dict:
+    """Full detail for every finding, keyed by the id the tables link to.
+
+    Previously only the highest-scoring finding was exported, and the detail
+    page merged it with whichever row the reader had clicked — so opening any
+    other finding showed that finding's title above the top finding's payload,
+    evidence and violations. Exporting every finding removes the mismatch
+    instead of papering over it.
+    """
+    violations_by_variant: dict[str, list] = {}
+    for violation in violations:
+        violations_by_variant.setdefault(violation.variant_id or "", []).append(violation)
+
+    out = {}
+    for finding in findings:
+        risk = risks.get(finding.id)
+        variant = variants.get(finding.variant_id or "")
+        case = cases.get(variant.attack_case_id) if variant else None
+        factors = (risk.factors if risk else None) or {}
+        weights = (risk.weights if risk else None) or {}
+
+        out[_short(finding.id, "F")] = {
+            "id": _short(finding.id, "F"),
+            "findingId": finding.id,
+            "title": finding.title,
+            "owasp": finding.owasp_tag or "—",
+            "owaspName": owasp_name(finding.owasp_tag) or "—",
+            "severity": risk.risk_level if risk else "LOW",
+            "risk": _pct(risk.score if risk else 0),
+            "confidence": int(round((finding.confidence or 0) * 100)),
+            "verdict": finding.verdict,
+            "description": finding.description,
+            "mitigation": finding.mitigation,
+            "payload": variant.payload if variant else None,
+            "transformation": variant.transformation if variant else "none",
+            "intent": case.original_intent if case else None,
+            "explanation": risk.explanation if risk else None,
+            # The scored factors for *this* finding, so "why this is risky" is
+            # this finding's arithmetic rather than the top finding's.
+            "components": [
+                {
+                    "label": name.replace("_", " ").title(),
+                    "axis": _axis_of(name),
+                    "score": int(round(float(value) * 100)),
+                    "weight": int(round(weights.get(name, 0) * 100)),
+                }
+                for name, value in factors.items()
+                if isinstance(value, (int, float))
+            ],
+            "unestablished": [
+                name.replace("_", " ")
+                for name, value in factors.items()
+                if not isinstance(value, (int, float))
+            ],
+            "violations": [
+                {"boundary": v.boundary, "expected": v.expected, "observed": v.observed}
+                for v in violations_by_variant.get(finding.variant_id or "", [])
+            ],
+            "evidence": [
+                {
+                    "id": _short(e.id, "EV"),
+                    "type": e.evidence_type.replace("_", " ").title(),
+                    "deterministic": bool(e.deterministic),
+                    "summary": e.summary,
+                    "timestamp": _time(e.created_at),
+                }
+                for e in evidence_by_finding.get(finding.id, [])
+            ],
+        }
+    return out
+
+
+def _top_detail(details, findings, risks) -> dict:
+    """The highest-scoring finding, for pages that describe the worst case."""
     if not findings:
         return {}
     top = max(findings, key=lambda f: risks[f.id].score if f.id in risks else 0)
-    risk = risks.get(top.id)
-    variant = variants.get(top.variant_id or "")
-    case = cases.get(variant.attack_case_id) if variant else None
-    related = [v for v in violations if v.variant_id == top.variant_id]
-
-    return {
-        "id": _short(top.id, "F"),
-        "findingId": top.id,
-        "title": top.title,
-        "owasp": top.owasp_tag or "—",
-        "owaspName": owasp_name(top.owasp_tag) or "—",
-        "severity": risk.risk_level if risk else "LOW",
-        "risk": _pct(risk.score if risk else 0),
-        "confidence": int(round((top.confidence or 0) * 100)),
-        "verdict": top.verdict,
-        "description": top.description,
-        "mitigation": top.mitigation,
-        "payload": variant.payload if variant else "—",
-        "transformation": variant.transformation if variant else "none",
-        "intent": case.original_intent if case else "—",
-        "violations": [
-            {"boundary": v.boundary, "expected": v.expected, "observed": v.observed}
-            for v in related
-        ],
-        "evidence": [
-            {
-                "id": _short(e.id, "EV"),
-                "type": e.evidence_type,
-                "deterministic": bool(e.deterministic),
-                "summary": e.summary,
-            }
-            for e in evidence_by_finding.get(top.id, [])
-        ],
-    }
+    return details.get(_short(top.id, "F"), {})
 
 
 PHASE_OK = "ok"
@@ -793,6 +963,10 @@ def _timeline(events, variants) -> list[dict]:
     return sorted(rows, key=lambda r: (not r["critical"], r["kind"] != "tool_call"))[:60]
 
 
+def _axis_of(name: str) -> str:
+    return "likelihood" if name in LIKELIHOOD_WEIGHTS else "impact"
+
+
 def _risk_components(risks) -> list[dict]:
     """Factors of the highest-scoring finding, with their real weights."""
     if not risks:
@@ -801,14 +975,17 @@ def _risk_components(risks) -> list[dict]:
     rows = []
     for name, value in (top.factors or {}).items():
         established = isinstance(value, (int, float))
+        axis = _axis_of(name)
+        weight = (top.weights or {}).get(name, 0)
         rows.append(
             {
                 "label": name.replace("_", " ").title(),
+                "axis": axis,
                 "score": int(round(float(value) * 100)) if established else None,
-                "weight": int(round((top.weights or {}).get(name, 0) * 100)),
+                "weight": int(round(weight * 100)),
                 "established": established,
                 "explain": (
-                    f"Contributes {(top.weights or {}).get(name, 0):.0%} of the composite."
+                    f"{weight:.0%} of the {axis} axis."
                     if established
                     # An unmeasured factor is excluded from the weighting rather
                     # than counted as zero risk.
@@ -820,42 +997,106 @@ def _risk_components(risks) -> list[dict]:
 
 
 def _contributions(risks) -> dict:
-    """Real per-factor contribution to the composite score.
+    """Real decomposition of the highest-scoring finding's composite.
 
-    The risk model is a weighted linear combination, so weight x value *is* each
-    factor's contribution — a true decomposition rather than an approximation of
-    one from a model that was never run.
+    The model is `likelihood x impact x confidence`, so there is no single
+    additive contribution per factor and presenting one would be a fabrication.
+    What *is* true is that each factor is a weighted share of its own axis, and
+    that the two axes multiply. This exports exactly that: per-factor shares
+    within an axis, the two axis values, and the arithmetic that combines them.
     """
     if not risks:
-        return {"features": [], "base": 0, "final": 0}
+        return {
+            "features": [],
+            "likelihood": None,
+            "impact": None,
+            "confidence": None,
+            "final": 0,
+            "unestablished": [],
+            "arithmetic": None,
+        }
 
     top = max(risks.values(), key=lambda r: r.score)
-    established = {
-        k: float(v) for k, v in (top.factors or {}).items() if isinstance(v, (int, float))
-    }
+    factors = top.factors or {}
     weights = top.weights or {}
-    total_weight = sum(weights.get(k, 0) for k in established) or 1.0
+    established = {k: float(v) for k, v in factors.items() if isinstance(v, (int, float))}
 
-    features = [
-        {
-            "feature": name,
-            "value": f"{value:.2f}",
-            "contribution": round((weights.get(name, 0) / total_weight) * value * 10, 2),
-            "direction": "up" if value >= 0.5 else "down",
-            "explain": f"weight {weights.get(name, 0):.2f}, value {value:.2f}",
-        }
-        for name, value in sorted(
-            established.items(), key=lambda kv: weights.get(kv[0], 0) * kv[1], reverse=True
+    axes: dict[str, float | None] = {}
+    for axis, axis_weights in (("likelihood", LIKELIHOOD_WEIGHTS), ("impact", IMPACT_WEIGHTS)):
+        present = {k: v for k, v in established.items() if k in axis_weights}
+        total = sum(axis_weights[k] for k in present)
+        axes[axis] = (
+            round(sum(axis_weights[k] * v for k, v in present.items()) / total, 3)
+            if total
+            else None
         )
+
+    features = []
+    for name, value in sorted(
+        established.items(), key=lambda kv: weights.get(kv[0], 0) * kv[1], reverse=True
+    ):
+        axis = _axis_of(name)
+        axis_weights = LIKELIHOOD_WEIGHTS if axis == "likelihood" else IMPACT_WEIGHTS
+        present_total = sum(axis_weights[k] for k in established if k in axis_weights) or 1.0
+        features.append(
+            {
+                "feature": name,
+                "axis": axis,
+                "value": round(value, 3),
+                "weight": weights.get(name, 0),
+                # Share of its own axis, which is what the arithmetic actually
+                # does with it — not a share of the final score.
+                "contribution": round((axis_weights[name] / present_total) * value, 3),
+                "direction": "up" if value >= 0.5 else "down",
+                "explain": f"{axis_weights[name] / present_total:.0%} of {axis}, value {value:.2f}",
+            }
+        )
+
+    stored = top.axes or {}
+    # Prefer what the scorer recorded. The axis values recomputed above are a
+    # fallback for scores written before the column existed; the confidence
+    # multiplier has no fallback, because dividing it back out of a rounded
+    # composite yields a number close to it but not equal to it, and a
+    # reconstruction must not be presented as a measurement.
+    likelihood = _as_number(stored.get("likelihood"), axes["likelihood"])
+    impact = _as_number(stored.get("impact"), axes["impact"])
+    confidence = stored.get("confidence") if isinstance(stored.get("confidence"), float) else None
+
+    parts = [
+        f"{value:.2f} {name}"
+        for name, value in (("likelihood", likelihood), ("impact", impact))
+        if value is not None
     ]
+    arithmetic = (
+        " x ".join(parts)
+        + (f" x {confidence:.2f} confidence" if confidence is not None else "")
+        + f" = {top.score}/10"
+        if parts
+        else None
+    )
+
     return {
         "features": features,
-        "base": 0,
+        "likelihood": likelihood,
+        "impact": impact,
+        "confidence": confidence,
         "final": top.score,
-        "unestablished": [
-            k for k, v in (top.factors or {}).items() if not isinstance(v, (int, float))
-        ],
+        "unestablished": [k for k, v in factors.items() if not isinstance(v, (int, float))],
+        "arithmetic": arithmetic,
     }
+
+
+def _as_number(stored, fallback):  # noqa: ANN001, ANN201
+    """The stored axis value, or the recomputed one when it predates the column.
+
+    An axis the scorer recorded as UNKNOWN comes back as that string, which is
+    not a number and must not be rendered as one.
+    """
+    if isinstance(stored, (int, float)):
+        return float(stored)
+    if isinstance(stored, str):
+        return None
+    return fallback
 
 
 DEFENCE_OUTCOME = {
@@ -1049,14 +1290,14 @@ def _regression(session: Session, scan: Scan, target) -> dict:
         "fixed": by_status.get(RegressionStatus.RESOLVED, 0),
         "new": newly_created,
         "regressions": regressed,
-        "riskPrev": _pct(_top_risk_of(session, previous.id)) if previous else None,
-        "riskCurrent": _pct(_top_risk_of(session, scan.id)),
+        "riskPrev": _posture_of(session, previous.id) if previous else None,
+        "riskCurrent": _posture_of(session, scan.id),
         "nextFocus": next_focus,
         "detail": (
             {
                 "category": f"{worst_tag} {owasp_name(worst_tag) or ''}".strip(),
-                "prev": _pct(_top_risk_of(session, previous.id)) if previous else None,
-                "current": _pct(_top_risk_of(session, scan.id)),
+                "prev": _posture_of(session, previous.id) if previous else None,
+                "current": _posture_of(session, scan.id),
             }
             if worst_tag
             else None
