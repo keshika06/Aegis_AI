@@ -23,22 +23,22 @@ export default function Sidebar() {
     <aside className="w-[248px] shrink-0 h-screen sticky top-0 flex flex-col border-r border-base-border bg-base-panel">
       <div className="px-5 pt-5 pb-4 flex items-center gap-2.5 border-b border-base-border">
         <div className="w-8 h-8 rounded-lg bg-brand flex items-center justify-center shadow-glow shrink-0">
-          <ShieldHalf size={18} className="text-white" />
+          <ShieldHalf size={18} className="text-content" />
         </div>
         <div>
-          <div className="text-[15px] font-bold text-white leading-tight">AegisAI</div>
-          <div className="text-[10px] text-slate-500 leading-tight tracking-wide">Validation Platform</div>
+          <div className="text-[15px] font-bold text-content leading-tight">AegisAI</div>
+          <div className="text-[10px] text-content-dim leading-tight tracking-wide">Validation Platform</div>
         </div>
       </div>
 
       <div className="px-3 pt-4 pb-2">
         <div className="label-eyebrow px-2 mb-1.5">Active Validation</div>
         <NavLink to="/" className="block card !bg-base-card2 px-3 py-2.5 hover:border-brand/50 transition-colors">
-          <div className="flex items-center gap-1.5 mono text-[13px] font-semibold text-white">
-            <CircleDot size={10} className="text-slate-500" />
+          <div className="flex items-center gap-1.5 mono text-[13px] font-semibold text-content">
+            <CircleDot size={10} className="text-content-dim" />
             {run.id}
           </div>
-          <div className="text-[11px] text-slate-500 mt-0.5 truncate">{run.target}</div>
+          <div className="text-[11px] text-content-dim mt-0.5 truncate">{run.target}</div>
         </NavLink>
       </div>
 
@@ -52,14 +52,14 @@ export default function Sidebar() {
               `flex items-center gap-2.5 px-3 py-2 rounded-lg text-[13px] font-medium transition-colors ${
                 isActive
                   ? 'bg-brand text-white shadow-glow'
-                  : 'text-slate-400 hover:text-slate-200 hover:bg-base-card'
+                  : 'text-content-muted hover:text-content hover:bg-base-card'
               }`
             }
           >
             <Icon size={16} />
             <span className="flex-1">{label}</span>
             {badge ? (
-              <span className="text-[10px] font-bold bg-sev-critical text-white rounded-full px-1.5 py-0.5 leading-none">
+              <span className="text-[10px] font-bold bg-sev-critical text-content rounded-full px-1.5 py-0.5 leading-none">
                 {badge}
               </span>
             ) : null}
@@ -69,10 +69,10 @@ export default function Sidebar() {
 
       <div className="px-3 py-3 border-t border-base-border">
         <div className="label-eyebrow px-2 mb-1.5">Data source</div>
-        <div className="px-2 text-[11px] text-slate-500 leading-relaxed mono break-all">
+        <div className="px-2 text-[11px] text-content-dim leading-relaxed mono break-all">
           {dataSource.scan_id ?? 'no scan exported'}
         </div>
-        <div className="px-2 text-[10px] text-slate-600 mt-1">
+        <div className="px-2 text-[10px] text-content-dim mt-1">
           {dataSource.generated_at ? `exported ${dataSource.generated_at.replace('T', ' ')}` : 'run: aegisai dashboard export'}
         </div>
       </div>

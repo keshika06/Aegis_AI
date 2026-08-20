@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react'
 import { ChevronDown, ChevronRight, ShieldOff, ShieldCheck, Shield, AlertTriangle } from 'lucide-react'
 import { PageHeader, Panel } from '../components/Panel'
 import { evidenceItems } from '../data/scanData'
+import { useTokens } from '../theme'
 
 // Filters are derived from the evidence actually present, so a tab can never
 // show an empty list — the previous fixed list matched types this scanner does
@@ -21,23 +22,26 @@ const DEFENCE_ICON = {
   ERROR_TIMEOUT: AlertTriangle
 }
 
-const DEFENCE_COLOR = {
-  ACCEPTED_BY_TARGET_CONTROL: '#ef4444',
-  REFUSED_BY_TARGET_LLM: '#eab308',
-  REJECTED_BY_TARGET_CONTROL: '#22c55e',
-  ERROR_TIMEOUT: '#64748b'
+// Keyed lookup rather than a frozen map: the colours have to follow the theme,
+// and a module-scope constant is evaluated once before one is chosen.
+const DEFENCE_TOKEN = {
+  ACCEPTED_BY_TARGET_CONTROL: 'critical',
+  REFUSED_BY_TARGET_LLM: 'medium',
+  REJECTED_BY_TARGET_CONTROL: 'low',
+  ERROR_TIMEOUT: 'neutral'
 }
 
 function Field({ label, children, mono = false }) {
   return (
     <div>
-      <div className="text-[10px] uppercase tracking-wide text-slate-500 mb-1">{label}</div>
-      <div className={`text-[13px] text-slate-200 ${mono ? 'mono break-all' : ''}`}>{children}</div>
+      <div className="text-[10px] uppercase tracking-wide text-content-dim mb-1">{label}</div>
+      <div className={`text-[13px] text-content ${mono ? 'mono break-all' : ''}`}>{children}</div>
     </div>
   )
 }
 
 export default function Evidence() {
+  const t = useTokens()
   const [filter, setFilter] = useState('all')
   const [expanded, setExpanded] = useState(evidenceItems[0]?.id ?? null)
 
@@ -76,7 +80,7 @@ export default function Evidence() {
             className={`px-3 py-1.5 rounded-lg text-xs font-bold uppercase tracking-wide transition-colors ${
               filter === t.key
                 ? 'bg-brand text-white'
-                : 'bg-base-card text-slate-400 hover:text-slate-200 border border-base-border'
+                : 'bg-base-card text-content-muted hover:text-content border border-base-border'
             }`}
           >
             {t.label}
@@ -87,12 +91,12 @@ export default function Evidence() {
       <Panel title="Evidence Timeline">
         <div className="space-y-2">
           {filtered.length === 0 && (
-            <div className="text-sm text-slate-500 py-6 text-center">No evidence of this type.</div>
+            <div className="text-sm text-content-dim py-6 text-center">No evidence of this type.</div>
           )}
           {filtered.map((e) => {
             const isOpen = expanded === e.id
             const Icon = DEFENCE_ICON[e.controlVerdict] ?? Shield
-            const colour = DEFENCE_COLOR[e.controlVerdict] ?? '#64748b'
+            const colour = t[DEFENCE_TOKEN[e.controlVerdict]] ?? t.neutral
 
             return (
               <div key={e.id} className="border border-base-border rounded-lg overflow-hidden">
@@ -100,28 +104,28 @@ export default function Evidence() {
                   onClick={() => setExpanded(isOpen ? null : e.id)}
                   className="w-full flex items-center gap-3 p-3 hover:bg-base-card2 transition-colors text-left"
                 >
-                  {isOpen ? <ChevronDown size={14} className="text-slate-500 shrink-0" />
-                          : <ChevronRight size={14} className="text-slate-500 shrink-0" />}
+                  {isOpen ? <ChevronDown size={14} className="text-content-dim shrink-0" />
+                          : <ChevronRight size={14} className="text-content-dim shrink-0" />}
 
                   <span
                     className="text-[10px] font-bold uppercase tracking-wide px-2 py-0.5 rounded shrink-0 w-[104px] text-center"
                     style={
                       e.deterministic
-                        ? { background: '#12301d', color: '#22c55e', border: '1px solid #1c4d2e' }
-                        : { background: '#1c2333', color: '#94a3b8', border: '1px solid #2a3348' }
+                        ? { background: 'var(--sev-low-bg)', color: t.low, border: `1px solid var(--sev-low-border)` }
+                        : { background: 'var(--sev-neutral-bg)', color: 'var(--text-muted)', border: '1px solid #2a3348' }
                     }
                     title={e.deterministic ? 'Deterministic proof' : 'Supporting signal only'}
                   >
                     {e.deterministic ? 'proof' : 'supporting'}
                   </span>
 
-                  <span className="text-xs font-bold text-slate-300 border border-base-border rounded px-2 py-0.5 shrink-0 w-[130px] text-center">
+                  <span className="text-xs font-bold text-content border border-base-border rounded px-2 py-0.5 shrink-0 w-[130px] text-center">
                     {e.type}
                   </span>
 
                   <span className="flex-1 min-w-0">
-                    <span className="block text-[13px] text-slate-200 truncate">{e.finding}</span>
-                    <span className="block mono text-[11px] text-slate-500 truncate">
+                    <span className="block text-[13px] text-content truncate">{e.finding}</span>
+                    <span className="block mono text-[11px] text-content-dim truncate">
                       {e.prompt ? `"${e.prompt.slice(0, 78)}${e.prompt.length > 78 ? '…' : ''}"` : '—'}
                     </span>
                   </span>
@@ -147,15 +151,15 @@ export default function Evidence() {
 
                     {/* 1. What was sent */}
                     <div>
-                      <div className="text-[11px] uppercase tracking-wide font-bold text-slate-400 mb-1.5">
+                      <div className="text-[11px] uppercase tracking-wide font-bold text-content-muted mb-1.5">
                         1 · The prompt that caused it
                       </div>
-                      <pre className="mono text-[12px] text-slate-200 bg-base-bg rounded-lg p-3 border border-base-border whitespace-pre-wrap break-words">
+                      <pre className="mono text-[12px] text-content bg-base-bg rounded-lg p-3 border border-base-border whitespace-pre-wrap break-words">
 {e.prompt ?? 'Not recorded.'}
                       </pre>
                       {e.transformation && e.transformation !== 'none' && (
-                        <div className="text-[11px] text-slate-500 mt-1.5">
-                          Delivered using the <span className="mono text-slate-300">{e.transformation}</span> family
+                        <div className="text-[11px] text-content-dim mt-1.5">
+                          Delivered using the <span className="mono text-content">{e.transformation}</span> family
                           — the same objective, expressed differently to test whether the target's controls generalise.
                         </div>
                       )}
@@ -163,7 +167,7 @@ export default function Evidence() {
 
                     {/* 2. What the defences did */}
                     <div>
-                      <div className="text-[11px] uppercase tracking-wide font-bold text-slate-400 mb-1.5">
+                      <div className="text-[11px] uppercase tracking-wide font-bold text-content-muted mb-1.5">
                         2 · What the target's defences did
                       </div>
                       <div
@@ -176,14 +180,14 @@ export default function Evidence() {
                             {e.defenceHeadline}
                           </span>
                           {e.statusCode && (
-                            <span className="mono text-[11px] text-slate-500 ml-auto">
+                            <span className="mono text-[11px] text-content-dim ml-auto">
                               HTTP {e.statusCode}{e.latencyMs ? ` · ${e.latencyMs}ms` : ''}
                             </span>
                           )}
                         </div>
-                        <p className="text-[12px] text-slate-300">{e.defenceExplain}</p>
+                        <p className="text-[12px] text-content">{e.defenceExplain}</p>
                         {e.controlReason && (
-                          <p className="mono text-[11px] text-slate-500 mt-1.5">{e.controlReason}</p>
+                          <p className="mono text-[11px] text-content-dim mt-1.5">{e.controlReason}</p>
                         )}
                       </div>
                     </div>
@@ -191,10 +195,10 @@ export default function Evidence() {
                     {/* 3. What came back */}
                     {e.response && (
                       <div>
-                        <div className="text-[11px] uppercase tracking-wide font-bold text-slate-400 mb-1.5">
+                        <div className="text-[11px] uppercase tracking-wide font-bold text-content-muted mb-1.5">
                           3 · What the target returned
                         </div>
-                        <pre className="mono text-[12px] text-slate-200 bg-base-bg rounded-lg p-3 border border-base-border whitespace-pre-wrap break-words max-h-52 overflow-y-auto">
+                        <pre className="mono text-[12px] text-content bg-base-bg rounded-lg p-3 border border-base-border whitespace-pre-wrap break-words max-h-52 overflow-y-auto">
 {e.response}
                         </pre>
                       </div>
@@ -202,26 +206,26 @@ export default function Evidence() {
 
                     {/* 4. Why it is proof */}
                     <div>
-                      <div className="text-[11px] uppercase tracking-wide font-bold text-slate-400 mb-1.5">
+                      <div className="text-[11px] uppercase tracking-wide font-bold text-content-muted mb-1.5">
                         4 · Why this counts as {e.deterministic ? 'proof' : 'a signal only'}
                       </div>
-                      <p className="text-[12px] text-slate-300">{e.whyItProves}</p>
+                      <p className="text-[12px] text-content">{e.whyItProves}</p>
                       {e.summary && (
-                        <p className="mono text-[11px] text-slate-500 mt-1.5">{e.summary}</p>
+                        <p className="mono text-[11px] text-content-dim mt-1.5">{e.summary}</p>
                       )}
                     </div>
 
                     {/* 5. Boundaries crossed */}
                     {e.boundaries.length > 0 && (
                       <div>
-                        <div className="text-[11px] uppercase tracking-wide font-bold text-slate-400 mb-1.5">
+                        <div className="text-[11px] uppercase tracking-wide font-bold text-content-muted mb-1.5">
                           5 · Policy boundaries crossed
                         </div>
                         <div className="space-y-1.5">
                           {e.boundaries.map((b) => (
                             <div key={b.boundary} className="text-[12px] bg-base-bg rounded-lg p-2.5 border border-base-border">
-                              <div className="mono text-slate-200 font-semibold mb-0.5">{b.boundary}</div>
-                              <div className="text-slate-500">expected: {b.expected}</div>
+                              <div className="mono text-content font-semibold mb-0.5">{b.boundary}</div>
+                              <div className="text-content-dim">expected: {b.expected}</div>
                               <div className="text-sev-critical">observed: {b.observed}</div>
                             </div>
                           ))}
@@ -240,14 +244,14 @@ export default function Evidence() {
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div className="p-4 rounded-lg border border-sev-low/40 bg-sev-lowBg">
             <div className="text-sev-low font-bold text-sm mb-1">Proof</div>
-            <p className="text-[13px] text-slate-300">
+            <p className="text-[13px] text-content">
               A canary returned, a declared policy boundary crossed, or sensitive data disclosed.
               These are measured, not interpreted, and are what allow a finding to reach CONFIRMED.
             </p>
           </div>
           <div className="p-4 rounded-lg border border-base-border bg-base-card2">
-            <div className="text-slate-300 font-bold text-sm mb-1">Supporting</div>
-            <p className="text-[13px] text-slate-300">
+            <div className="text-content font-bold text-sm mb-1">Supporting</div>
+            <p className="text-[13px] text-content">
               Response wording that suggests compliance. Useful context, but it can never on its own
               raise a finding above SUSPECTED — that cap is enforced in the scanner, not left to
               judgement.

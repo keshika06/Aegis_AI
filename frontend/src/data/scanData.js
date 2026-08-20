@@ -70,19 +70,19 @@ export const contributionArithmetic = contributions.arithmetic ?? null
 export const unestablishedFactors = contributions.unestablished ?? []
 
 export const severityColor = {
-  CRITICAL: { text: '#ef4444', bg: '#3a1518', border: '#5c2026' },
-  HIGH: { text: '#f97316', bg: '#3a220f', border: '#5c3517' },
-  MEDIUM: { text: '#eab308', bg: '#3a300f', border: '#5c4d17' },
-  LOW: { text: '#22c55e', bg: '#12301d', border: '#1c4d2e' },
-  INFO: { text: '#3b82f6', bg: '#12213a', border: '#1c355c' },
-  NEUTRAL: { text: '#64748b', bg: '#1c2333', border: '#2a3348' },
-  CONFIRMED: { text: '#ef4444', bg: '#3a1518', border: '#5c2026' },
-  LIKELY: { text: '#eab308', bg: '#3a300f', border: '#5c4d17' },
-  SUSPECTED: { text: '#64748b', bg: '#1c2333', border: '#2a3348' },
-  OPEN: { text: '#f97316', bg: '#3a220f', border: '#5c3517' },
-  CLEAR: { text: '#22c55e', bg: '#12301d', border: '#1c4d2e' },
-  RESOLVED: { text: '#22c55e', bg: '#12301d', border: '#1c4d2e' },
-  REGRESSED: { text: '#ef4444', bg: '#3a1518', border: '#5c2026' },
-  ACTIVE: { text: '#3b82f6', bg: '#12213a', border: '#1c355c' },
-  EXHAUSTED: { text: '#f97316', bg: '#3a220f', border: '#5c3517' }
+  CRITICAL: { text: 'var(--sev-critical)', bg: 'var(--sev-critical-bg)', border: 'var(--sev-critical-border)' },
+  HIGH: { text: 'var(--sev-high)', bg: 'var(--sev-high-bg)', border: 'var(--sev-high-border)' },
+  MEDIUM: { text: 'var(--sev-medium)', bg: 'var(--sev-medium-bg)', border: 'var(--sev-medium-border)' },
+  LOW: { text: 'var(--sev-low)', bg: 'var(--sev-low-bg)', border: 'var(--sev-low-border)' },
+  INFO: { text: 'var(--sev-info)', bg: 'var(--sev-info-bg)', border: 'var(--sev-info-border)' },
+  NEUTRAL: { text: 'var(--sev-neutral)', bg: 'var(--sev-neutral-bg)', border: 'var(--sev-neutral-border)' },
+  CONFIRMED: { text: 'var(--sev-critical)', bg: 'var(--sev-critical-bg)', border: 'var(--sev-critical-border)' },
+  LIKELY: { text: 'var(--sev-medium)', bg: 'var(--sev-medium-bg)', border: 'var(--sev-medium-border)' },
+  SUSPECTED: { text: 'var(--sev-neutral)', bg: 'var(--sev-neutral-bg)', border: 'var(--sev-neutral-border)' },
+  OPEN: { text: 'var(--sev-high)', bg: 'var(--sev-high-bg)', border: 'var(--sev-high-border)' },
+  CLEAR: { text: 'var(--sev-low)', bg: 'var(--sev-low-bg)', border: 'var(--sev-low-border)' },
+  RESOLVED: { text: 'var(--sev-low)', bg: 'var(--sev-low-bg)', border: 'var(--sev-low-border)' },
+  REGRESSED: { text: 'var(--sev-critical)', bg: 'var(--sev-critical-bg)', border: 'var(--sev-critical-border)' },
+  ACTIVE: { text: 'var(--sev-info)', bg: 'var(--sev-info-bg)', border: 'var(--sev-info-border)' },
+  EXHAUSTED: { text: 'var(--sev-high)', bg: 'var(--sev-high-bg)', border: 'var(--sev-high-border)' }
 }

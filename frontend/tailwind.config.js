@@ -1,4 +1,8 @@
 /** @type {import('tailwindcss').Config} */
+//
+// Colours resolve to the CSS custom properties defined in src/index.css, so
+// every Tailwind utility follows the active theme without a `dark:` variant on
+// each element. The palette has exactly one home; this file only names it.
 export default {
   content: ['./index.html', './src/**/*.{js,jsx}'],
   theme: {
@@ -9,36 +13,41 @@ export default {
       },
       colors: {
         base: {
-          bg: '#0a0e17',
-          panel: '#0f1420',
-          card: '#131a29',
-          card2: '#161d2e',
-          border: '#232b3d',
-          border2: '#2a3348'
+          bg: 'var(--bg)',
+          panel: 'var(--panel)',
+          card: 'var(--card)',
+          card2: 'var(--card2)',
+          border: 'var(--border)',
+          border2: 'var(--border2)'
         },
         brand: {
-          DEFAULT: '#7c5cff',
-          soft: '#8b6bffb3',
-          dim: '#3d3266'
+          DEFAULT: 'var(--brand)',
+          soft: 'var(--brand-soft)',
+          dim: 'var(--brand-dim)'
+        },
+        content: {
+          DEFAULT: 'var(--text)',
+          muted: 'var(--text-muted)',
+          dim: 'var(--text-dim)'
         },
         sev: {
-          critical: '#ef4444',
-          criticalBg: '#3a1518',
-          high: '#f97316',
-          highBg: '#3a220f',
-          medium: '#eab308',
-          mediumBg: '#3a300f',
-          low: '#22c55e',
-          lowBg: '#12301d',
-          info: '#3b82f6',
-          infoBg: '#12213a',
-          neutral: '#64748b',
-          neutralBg: '#1c2333'
+          critical: 'var(--sev-critical)',
+          criticalBg: 'var(--sev-critical-bg)',
+          high: 'var(--sev-high)',
+          highBg: 'var(--sev-high-bg)',
+          medium: 'var(--sev-medium)',
+          mediumBg: 'var(--sev-medium-bg)',
+          low: 'var(--sev-low)',
+          lowBg: 'var(--sev-low-bg)',
+          info: 'var(--sev-info)',
+          infoBg: 'var(--sev-info-bg)',
+          neutral: 'var(--sev-neutral)',
+          neutralBg: 'var(--sev-neutral-bg)'
         }
       },
       boxShadow: {
-        panel: '0 1px 2px rgba(0,0,0,0.4), 0 0 0 1px rgba(255,255,255,0.02)',
-        glow: '0 0 24px rgba(124,92,255,0.15)'
+        panel: 'var(--shadow-panel)',
+        glow: 'var(--shadow-glow)'
       }
     }
   },

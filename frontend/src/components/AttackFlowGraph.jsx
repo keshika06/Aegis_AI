@@ -1,10 +1,12 @@
 // Visual attack path: eight phases drawn as a flow the eye can follow.
+import { useTokens } from '../theme'
 //
 // Two decisions carry the meaning:
 //   * Both rows read left-to-right. A serpentine layout doubles back, which
 //     makes a *sequence* diagram momentarily unreadable.
 //   * The colour of each connector says whether the attack was still travelling
 //     after that phase — that, not the node colour, is the story.
+
 
 const W = 168
 const H = 92
@@ -13,11 +15,11 @@ const ROW_GAP = 56
 const PAD_X = 14
 const PAD_TOP = 10
 
-const STATUS = {
-  failed: { stroke: '#ef4444', fill: '#241318', accent: '#ef4444', label: 'BREACHED' },
-  ok: { stroke: '#22c55e', fill: '#10281a', accent: '#22c55e', label: 'HELD' },
-  info: { stroke: '#39435a', fill: '#151b28', accent: '#94a3b8', label: 'OBSERVED' }
-}
+const statusFor = (t) => ({
+  failed: { stroke: t.critical, fill: 'var(--sev-critical-bg)', accent: t.critical, label: 'BREACHED' },
+  ok: { stroke: t.low, fill: 'var(--sev-low-bg)', accent: t.low, label: 'HELD' },
+  info: { stroke: t.rail, fill: 'var(--sev-neutral-bg)', accent: 'var(--text-muted)', label: 'OBSERVED' }
+})
 
 function clamp(text, max) {
   const t = String(text ?? '')
@@ -25,6 +27,8 @@ function clamp(text, max) {
 }
 
 export default function AttackFlowGraph({ phases, onSelect, selected }) {
+  const t = useTokens()
+  const STATUS = statusFor(t)
   if (!phases?.length) return null
 
   const perRow = Math.ceil(phases.length / 2)
@@ -48,11 +52,11 @@ export default function AttackFlowGraph({ phases, onSelect, selected }) {
         <defs>
           <marker id="afgRed" markerWidth="10" markerHeight="10" refX="8" refY="3.2"
                   orient="auto" markerUnits="strokeWidth">
-            <path d="M0,0 L0,6.4 L9,3.2 z" fill="#ef4444" />
+            <path d="M0,0 L0,6.4 L9,3.2 z" fill={t.critical} />
           </marker>
           <marker id="afgGrey" markerWidth="10" markerHeight="10" refX="8" refY="3.2"
                   orient="auto" markerUnits="strokeWidth">
-            <path d="M0,0 L0,6.4 L9,3.2 z" fill="#4b5568" />
+            <path d="M0,0 L0,6.4 L9,3.2 z" fill={t.rail} />
           </marker>
           <filter id="afgGlow" x="-40%" y="-40%" width="180%" height="180%">
             <feGaussianBlur stdDeviation="3" result="b" />
@@ -64,7 +68,7 @@ export default function AttackFlowGraph({ phases, onSelect, selected }) {
           const a = pos(i)
           const b = pos(i + 1)
           const stopped = p.status === 'ok'
-          const stroke = stopped ? '#4b5568' : '#ef4444'
+          const stroke = stopped ? t.rail : t.critical
           const marker = stopped ? 'url(#afgGrey)' : 'url(#afgRed)'
           const dash = stopped ? '6 5' : undefined
 
@@ -102,7 +106,7 @@ export default function AttackFlowGraph({ phases, onSelect, selected }) {
               <rect
                 x={x} y={y} width={W} height={H} rx="12"
                 fill={s.fill}
-                stroke={isSel ? '#7c5cff' : s.stroke}
+                stroke={isSel ? t.brand : s.stroke}
                 strokeWidth={isSel ? 2.4 : 1.5}
                 opacity={isBreach ? 1 : 0.96}
               />
@@ -118,7 +122,7 @@ export default function AttackFlowGraph({ phases, onSelect, selected }) {
                 {p.n}
               </text>
 
-              <text x={x + 42} y={y + 26} fill="#f1f5f9" fontSize="12.5" fontWeight="700">
+              <text x={x + 42} y={y + 26} fill={t.needle} fontSize="12.5" fontWeight="700">
                 {clamp(p.name, 20)}
               </text>
 
@@ -127,10 +131,10 @@ export default function AttackFlowGraph({ phases, onSelect, selected }) {
                 {s.label}
               </text>
 
-              <text x={x + 14} y={y + 68} fill="#cbd5e1" fontSize="10.5">
+              <text x={x + 14} y={y + 68} fill={t.axis} fontSize="10.5">
                 {clamp(p.headline, 26)}
               </text>
-              <text x={x + 14} y={y + 82} fill="#7c8aab" fontSize="9.5">
+              <text x={x + 14} y={y + 82} fill={t.axis} fontSize="9.5">
                 {clamp(p.detail, 30)}
               </text>
             </g>

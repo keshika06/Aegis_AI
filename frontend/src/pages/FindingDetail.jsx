@@ -2,6 +2,7 @@ import { useParams, Link } from 'react-router-dom'
 import { PageHeader, Panel, Bar } from '../components/Panel'
 import SeverityBadge from '../components/SeverityBadge'
 import { findingDetails, findings } from '../data/scanData'
+import { useTokens } from '../theme'
 
 // Likelihood and impact multiply, so they are shown as two groups rather than
 // one flat list — a reader comparing a factor against the wrong axis would draw
@@ -12,6 +13,7 @@ const AXIS_LABEL = {
 }
 
 export default function FindingDetail() {
+  const t = useTokens()
   const { id } = useParams()
   const d = findingDetails[id]
 
@@ -39,18 +41,18 @@ export default function FindingDetail() {
         }
         right={
           <div className="flex items-center gap-4">
-            <div className="text-right"><div className="text-[11px] text-slate-500">Risk Score</div><div className="text-xl font-bold text-white">{d.risk}/100</div></div>
-            <div className="text-right"><div className="text-[11px] text-slate-500">Confidence</div><div className="text-xl font-bold text-white">{d.confidence}%</div></div>
+            <div className="text-right"><div className="text-[11px] text-content-dim">Risk Score</div><div className="text-xl font-bold text-content">{d.risk}/100</div></div>
+            <div className="text-right"><div className="text-[11px] text-content-dim">Confidence</div><div className="text-xl font-bold text-content">{d.confidence}%</div></div>
           </div>
         }
       />
       <div className="flex items-center gap-2 mb-6 -mt-4 flex-wrap">
         <SeverityBadge level={d.severity} size="lg" />
-        <Link to="/owasp-mapping" className="mono text-xs text-slate-400 border border-base-border rounded px-2 py-1">
+        <Link to="/owasp-mapping" className="mono text-xs text-content-muted border border-base-border rounded px-2 py-1">
           {d.owasp}{d.owaspName !== '—' ? ` · ${d.owaspName}` : ''}
         </Link>
-        <span className="text-xs font-bold text-slate-300 border border-base-border rounded px-2 py-1">{d.verdict}</span>
-        <span className="mono text-[11px] text-slate-500 border border-base-border rounded px-2 py-1">
+        <span className="text-xs font-bold text-content border border-base-border rounded px-2 py-1">{d.verdict}</span>
+        <span className="mono text-[11px] text-content-dim border border-base-border rounded px-2 py-1">
           {d.transformation === 'none' ? 'sent as written' : `via ${d.transformation}`}
         </span>
       </div>
@@ -58,10 +60,10 @@ export default function FindingDetail() {
       {d.description && (
         <Panel className="mb-5 !bg-gradient-to-br !from-base-card !to-base-card2 border-brand/30">
           <div className="label-eyebrow mb-2 text-brand">What was found</div>
-          <p className="text-[14px] text-slate-200 leading-relaxed">{d.description}</p>
+          <p className="text-[14px] text-content leading-relaxed">{d.description}</p>
           {d.intent && (
-            <p className="text-[12px] text-slate-500 mt-2">
-              Objective under test: <span className="text-slate-400">{d.intent.replace(/_/g, ' ')}</span>
+            <p className="text-[12px] text-content-dim mt-2">
+              Objective under test: <span className="text-content-muted">{d.intent.replace(/_/g, ' ')}</span>
             </p>
           )}
         </Panel>
@@ -71,31 +73,31 @@ export default function FindingDetail() {
         <Panel title="Why this scored what it did">
           {axes.map((axis) => (
             <div key={axis} className="mb-4 last:mb-0">
-              <div className="text-[11px] uppercase tracking-wide text-slate-500 mb-2">{AXIS_LABEL[axis]}</div>
+              <div className="text-[11px] uppercase tracking-wide text-content-dim mb-2">{AXIS_LABEL[axis]}</div>
               {d.components.filter((c) => c.axis === axis).map((c) => (
-                <Bar key={c.label} label={c.label} score={c.score} color={axis === 'impact' ? '#ef4444' : '#f97316'} sub={`weight ${c.weight}% of ${axis}`} />
+                <Bar key={c.label} label={c.label} score={c.score} color={axis === 'impact' ? '#ef4444' : t.high} sub={`weight ${c.weight}% of ${axis}`} />
               ))}
             </div>
           ))}
           {d.unestablished.length > 0 && (
-            <div className="mt-3 pt-3 border-t border-base-border text-[11px] text-slate-500">
+            <div className="mt-3 pt-3 border-t border-base-border text-[11px] text-content-dim">
               Not established for this finding, so excluded from the weighting: {d.unestablished.join(', ')}.
             </div>
           )}
-          {d.explanation && <div className="mt-3 mono text-[11px] text-slate-500">{d.explanation}</div>}
+          {d.explanation && <div className="mt-3 mono text-[11px] text-content-dim">{d.explanation}</div>}
         </Panel>
 
         <Panel title="Evidence">
           <div className="space-y-2">
-            {d.evidence.length === 0 && <div className="text-sm text-slate-500">No evidence recorded for this finding.</div>}
+            {d.evidence.length === 0 && <div className="text-sm text-content-dim">No evidence recorded for this finding.</div>}
             {d.evidence.map((e) => (
               <Link key={e.id} to="/evidence" className="flex items-center justify-between p-2.5 rounded-lg hover:bg-base-card2 transition-colors border border-base-border">
                 <div className="flex items-center gap-3 min-w-0">
                   <span className="mono text-xs text-brand font-semibold shrink-0">{e.id}</span>
-                  <span className="text-xs text-slate-300 shrink-0">{e.type}</span>
-                  <span className="text-[11px] text-slate-500 truncate">{e.summary}</span>
+                  <span className="text-xs text-content shrink-0">{e.type}</span>
+                  <span className="text-[11px] text-content-dim truncate">{e.summary}</span>
                 </div>
-                <div className="flex items-center gap-3 text-[11px] text-slate-500 shrink-0">
+                <div className="flex items-center gap-3 text-[11px] text-content-dim shrink-0">
                   <span className={e.deterministic ? 'text-sev-low font-bold' : ''}>{e.deterministic ? 'proof' : 'supporting'}</span>
                   <span className="mono">{e.timestamp}</span>
                 </div>
@@ -107,7 +109,7 @@ export default function FindingDetail() {
 
       {d.payload && (
         <Panel title="The probe that produced this" className="mb-5">
-          <pre className="mono text-[12px] text-slate-200 bg-base-bg rounded-lg p-3 border border-base-border whitespace-pre-wrap break-words max-h-60 overflow-y-auto">
+          <pre className="mono text-[12px] text-content bg-base-bg rounded-lg p-3 border border-base-border whitespace-pre-wrap break-words max-h-60 overflow-y-auto">
 {d.payload}
           </pre>
         </Panel>
@@ -118,8 +120,8 @@ export default function FindingDetail() {
           <div className="space-y-2">
             {d.violations.map((v) => (
               <div key={v.boundary} className="text-[12px] bg-base-bg rounded-lg p-2.5 border border-base-border">
-                <div className="mono text-slate-200 font-semibold mb-0.5">{v.boundary}</div>
-                <div className="text-slate-500">expected: {v.expected}</div>
+                <div className="mono text-content font-semibold mb-0.5">{v.boundary}</div>
+                <div className="text-content-dim">expected: {v.expected}</div>
                 <div className="text-sev-critical">observed: {v.observed}</div>
               </div>
             ))}
@@ -129,7 +131,7 @@ export default function FindingDetail() {
 
       {d.mitigation && (
         <Panel title="Recommendation" className="border-l-4 border-l-sev-critical">
-          <p className="text-[13px] text-slate-300 leading-relaxed">{d.mitigation}</p>
+          <p className="text-[13px] text-content leading-relaxed">{d.mitigation}</p>
         </Panel>
       )}
     </div>

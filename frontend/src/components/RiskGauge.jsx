@@ -1,11 +1,14 @@
-function bandColor(score) {
-  if (score >= 80) return '#ef4444'
-  if (score >= 60) return '#f97316'
-  if (score >= 35) return '#eab308'
-  return '#22c55e'
+
+import { useTokens } from '../theme'
+function bandColor(score, t) {
+  if (score >= 80) return t.critical
+  if (score >= 60) return t.high
+  if (score >= 35) return t.medium
+  return t.low
 }
 
 export default function RiskGauge({ score, label, size = 200 }) {
+  const t = useTokens()
   const angle = (score / 100) * 180
   const r = size / 2 - 14
   const cx = size / 2
@@ -17,10 +20,10 @@ export default function RiskGauge({ score, label, size = 200 }) {
   const [x1, y1] = polar(0)
   const [x2, y2] = polar(angle)
   const bands = [
-    { from: 0, to: 35, color: '#22c55e' },
-    { from: 35, to: 60, color: '#eab308' },
-    { from: 60, to: 80, color: '#f97316' },
-    { from: 80, to: 100, color: '#ef4444' }
+    { from: 0, to: 35, color: t.low },
+    { from: 35, to: 60, color: t.medium },
+    { from: 60, to: 80, color: t.high },
+    { from: 80, to: 100, color: t.critical }
   ]
   return (
     <div className="flex flex-col items-center">
@@ -43,7 +46,7 @@ export default function RiskGauge({ score, label, size = 200 }) {
         })}
         <path
           d={`M ${x1} ${y1} A ${r} ${r} 0 ${angle > 180 ? 1 : 0} 1 ${x2} ${y2}`}
-          stroke={bandColor(score)}
+          stroke={bandColor(score, t)}
           strokeWidth="14"
           fill="none"
           strokeLinecap="round"
@@ -53,16 +56,16 @@ export default function RiskGauge({ score, label, size = 200 }) {
           y1={cy}
           x2={polar(angle)[0]}
           y2={polar(angle)[1]}
-          stroke="#e6e9f0"
+          stroke={t.needle}
           strokeWidth="2"
         />
-        <circle cx={cx} cy={cy} r="4" fill="#e6e9f0" />
+        <circle cx={cx} cy={cy} r="4" fill={t.needle} />
       </svg>
       <div className="text-center -mt-2">
-        <div className="text-4xl font-extrabold" style={{ color: bandColor(score) }}>
-          {score}<span className="text-lg text-slate-500">/100</span>
+        <div className="text-4xl font-extrabold" style={{ color: bandColor(score, t) }}>
+          {score}<span className="text-lg text-content-dim">/100</span>
         </div>
-        {label && <div className="text-xs font-bold uppercase tracking-wide text-slate-400 mt-1">{label}</div>}
+        {label && <div className="text-xs font-bold uppercase tracking-wide text-content-muted mt-1">{label}</div>}
       </div>
     </div>
   )

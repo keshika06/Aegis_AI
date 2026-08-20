@@ -2,26 +2,117 @@
 @tailwind components;
 @tailwind utilities;
 
+/* The palette. Every surface, text and severity colour is a custom property,
+   so a theme switch is one attribute on <html> rather than a class on each
+   element. Tailwind's colours in tailwind.config.js resolve to these names, and
+   inline `style` props resolve them too — only Recharts cannot, because SVG
+   presentation attributes do not evaluate var(); see theme.jsx. */
+:root,
+:root[data-theme='dark'] {
+  --bg: #0a0e17;
+  --panel: #0f1420;
+  --card: #131a29;
+  --card2: #161d2e;
+  --border: #232b3d;
+  --border2: #2a3348;
+
+  --text: #e6e9f0;
+  --text-muted: #7c8aab;
+  --text-dim: #64748b;
+
+  --brand: #7c5cff;
+  --brand-soft: #8b6bffb3;
+  --brand-dim: #3d3266;
+
+  --sev-critical: #ef4444;
+  --sev-critical-bg: #3a1518;
+  --sev-critical-border: #5c2026;
+  --sev-high: #f97316;
+  --sev-high-bg: #3a220f;
+  --sev-high-border: #5c3517;
+  --sev-medium: #eab308;
+  --sev-medium-bg: #3a300f;
+  --sev-medium-border: #5c4d17;
+  --sev-low: #22c55e;
+  --sev-low-bg: #12301d;
+  --sev-low-border: #1c4d2e;
+  --sev-info: #3b82f6;
+  --sev-info-bg: #12213a;
+  --sev-info-border: #1c355c;
+  --sev-neutral: #64748b;
+  --sev-neutral-bg: #1c2333;
+  --sev-neutral-border: #2a3348;
+
+  --shadow-panel: 0 1px 2px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(255, 255, 255, 0.02);
+  --shadow-glow: 0 0 24px rgba(124, 92, 255, 0.15);
+  --code-bg: #0a0e17;
+}
+
+:root[data-theme='light'] {
+  --bg: #f4f6fa;
+  --panel: #ffffff;
+  --card: #ffffff;
+  --card2: #f7f9fc;
+  --border: #e2e6ee;
+  --border2: #d4dae6;
+
+  --text: #131a29;
+  --text-muted: #5c6880;
+  --text-dim: #7b8699;
+
+  /* Darkened so it holds contrast against white rather than glowing on it. */
+  --brand: #5b3fd9;
+  --brand-soft: #5b3fd9b3;
+  --brand-dim: #d9d2f7;
+
+  /* Severity keeps its hue and loses its luminance: the dark values are tuned
+     against near-black and fall below readable contrast on a light surface.
+     Tints invert from deep-and-saturated to pale-and-desaturated. */
+  --sev-critical: #d92020;
+  --sev-critical-bg: #fdeaea;
+  --sev-critical-border: #f5c2c2;
+  --sev-high: #c2570a;
+  --sev-high-bg: #fdf0e4;
+  --sev-high-border: #f3d3b3;
+  --sev-medium: #a16207;
+  --sev-medium-bg: #fdf6e3;
+  --sev-medium-border: #eedfae;
+  --sev-low: #15803d;
+  --sev-low-bg: #e8f6ed;
+  --sev-low-border: #b9e2c8;
+  --sev-info: #1d4ed8;
+  --sev-info-bg: #e8eefc;
+  --sev-info-border: #c0d0f5;
+  --sev-neutral: #5c6880;
+  --sev-neutral-bg: #eef1f6;
+  --sev-neutral-border: #dde2ec;
+
+  --shadow-panel: 0 1px 2px rgba(16, 24, 40, 0.06), 0 0 0 1px rgba(16, 24, 40, 0.03);
+  --shadow-glow: 0 0 20px rgba(91, 63, 217, 0.12);
+  --code-bg: #f2f4f9;
+}
+
 * { box-sizing: border-box; }
 
 html, body, #root { height: 100%; }
 
 body {
-  background-color: #0a0e17;
-  color: #e6e9f0;
+  background-color: var(--bg);
+  color: var(--text);
   font-feature-settings: "tnum";
+  transition: background-color 0.18s ease, color 0.18s ease;
 }
 
 ::-webkit-scrollbar { width: 8px; height: 8px; }
 ::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: #232b3d; border-radius: 4px; }
-::-webkit-scrollbar-thumb:hover { background: #2a3348; }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+::-webkit-scrollbar-thumb:hover { background: var(--border2); }
 
 .mono { font-family: 'JetBrains Mono', ui-monospace, monospace; }
 
 .card {
-  background-color: #131a29;
-  border: 1px solid #232b3d;
+  background-color: var(--card);
+  border: 1px solid var(--border);
   border-radius: 10px;
 }
 
@@ -30,8 +121,12 @@ body {
   letter-spacing: 0.08em;
   font-weight: 600;
   text-transform: uppercase;
-  color: #7c8aab;
+  color: var(--text-muted);
 }
+
+/* Code and payload blocks: a page-coloured surface in both themes, so a
+   prompt never renders as light-on-light. */
+.surface-code { background-color: var(--code-bg); }
 
 .scroll-thin { scrollbar-width: thin; }
 
@@ -40,3 +135,7 @@ body {
   50% { opacity: 0.35; }
 }
 .pulse-dot { animation: pulse-dot 2s ease-in-out infinite; }
+
+/* The report preview is a print surface. It is deliberately light in both
+   themes, because it is exported to PDF and paper has one colour. */
+.print-surface { color-scheme: light; }

@@ -1,7 +1,9 @@
 // Defence-in-depth view: concentric layers the attack had to pass to reach impact.
+import { useTokens } from '../theme'
 //
 // Reads at a glance in a way a table does not — a breached layer is drawn broken,
 // so the number of gaps between the attacker and the asset is the message.
+
 
 const LAYERS = [
   { phase: 3, name: 'Input control', short: 'Filter / moderation' },
@@ -14,12 +16,13 @@ const SIZE = 300
 const CENTER = SIZE / 2
 
 export default function DefenceLayers({ phases }) {
+  const t = useTokens()
   const byPhase = Object.fromEntries((phases ?? []).map((p) => [p.n, p]))
   const breached = LAYERS.filter((l) => byPhase[l.phase]?.status === 'failed').length
   // The centre must not claim the asset was reached when a layer held. Phase 7
   // is where deterministic proof is recorded, so it is what decides this.
   const reached = byPhase[7]?.status === 'failed'
-  const assetColour = reached ? '#ef4444' : '#3f4a63'
+  const assetColour = reached ? t.critical : t.rail
 
   return (
     <div className="flex flex-col items-center">
@@ -28,7 +31,7 @@ export default function DefenceLayers({ phases }) {
         <defs>
           <marker id="arrowRedLayer" markerWidth="9" markerHeight="9" refX="7" refY="3"
                   orient="auto" markerUnits="strokeWidth">
-            <path d="M0,0 L0,6 L8,3 z" fill="#ef4444" />
+            <path d="M0,0 L0,6 L8,3 z" fill={t.critical} />
           </marker>
           <filter id="breachGlow" x="-50%" y="-50%" width="200%" height="200%">
             <feGaussianBlur stdDeviation="3" result="b" />
@@ -41,7 +44,7 @@ export default function DefenceLayers({ phases }) {
           const status = byPhase[layer.phase]?.status
           const isBreached = status === 'failed'
           const held = status === 'ok'
-          const colour = isBreached ? '#ef4444' : held ? '#22c55e' : '#3f4a63'
+          const colour = isBreached ? t.critical : held ? t.low : t.rail
 
           return (
             <g key={layer.phase}>
@@ -65,11 +68,11 @@ export default function DefenceLayers({ phases }) {
         })}
 
         {/* The asset at the centre */}
-        <circle cx={CENTER} cy={CENTER} r="28" fill={reached ? '#2a1518' : '#1c2333'}
+        <circle cx={CENTER} cy={CENTER} r="28" fill={reached ? 'var(--sev-critical-bg)' : 'var(--sev-neutral-bg)'}
                 stroke={assetColour} strokeWidth="2" />
         <text x={CENTER} y={CENTER - 2} textAnchor="middle" fill={assetColour}
               fontSize="9.5" fontWeight="700">ASSET</text>
-        <text x={CENTER} y={CENTER + 10} textAnchor="middle" fill="#8b97b0" fontSize="8">
+        <text x={CENTER} y={CENTER + 10} textAnchor="middle" fill={t.axis} fontSize="8">
           {reached ? 'reached' : 'not proven'}
         </text>
 
@@ -82,11 +85,11 @@ export default function DefenceLayers({ phases }) {
       </svg>
 
       <div className="text-center mt-3">
-        <div className="text-[13px] text-slate-300">
+        <div className="text-[13px] text-content">
           <span className="font-bold text-sev-critical">{breached}</span> of {LAYERS.length} defence
           layers breached
         </div>
-        <div className="text-[11px] text-slate-500 mt-0.5">
+        <div className="text-[11px] text-content-dim mt-0.5">
           {breached === LAYERS.length
             ? 'Nothing stood between the probe and the asset.'
             : reached

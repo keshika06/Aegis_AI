@@ -1,15 +1,24 @@
 import { useRef } from 'react'
 import { Download, FileJson, Printer } from 'lucide-react'
+// A print surface, fixed light in both themes because it is exported to PDF.
+// It carries its own literal palette rather than the page's theme variables,
+// which would render white-on-white when exported from dark mode.
+const PRINT_SEVERITY = {
+  CRITICAL: '#dc2626', HIGH: '#ea580c', MEDIUM: '#ca8a04', LOW: '#16a34a',
+  INFO: '#2563eb', NEUTRAL: '#64748b', CONFIRMED: '#dc2626', LIKELY: '#ca8a04',
+  SUSPECTED: '#64748b', OPEN: '#ea580c', CLEAR: '#16a34a'
+}
+
 import {
   run, findings, owaspCategories, riskComponents, factorContributions, contributionFinal,
-  attackChainNodes, evidenceItems, dataSource, controlResults, regression, severityColor,
+  attackChainNodes, evidenceItems, dataSource, controlResults, regression,
   chainSummary, recommendedActions, contributionArithmetic, targetProfile
 } from '../data/scanData'
 
 function sevPill(sev) {
-  const c = severityColor[sev] || severityColor.NEUTRAL
+  const c = PRINT_SEVERITY[sev] ?? PRINT_SEVERITY.NEUTRAL
   return (
-    <span className="text-[10px] font-bold uppercase px-2 py-0.5 rounded" style={{ color: '#fff', backgroundColor: c.text }}>
+    <span className="text-[10px] font-bold uppercase px-2 py-0.5 rounded" style={{ color: '#fff', backgroundColor: c }}>
       {sev}
     </span>
   )
@@ -97,7 +106,7 @@ export default function ReportPreview() {
           {/* Executive Summary */}
           <Section title="1 · Executive Summary">
             <div className="grid grid-cols-4 gap-4">
-              <Stat label="Overall Risk" value={run.severity} color={severityColor[run.severity]?.text ?? '#0a0e17'} />
+              <Stat label="Overall Risk" value={run.severity} color={PRINT_SEVERITY[run.severity] ?? '#0a0e17'} />
               <Stat label="Risk Score" value={`${run.risk}/100`} />
               <Stat label="Critical Findings" value={run.critical} color="#dc2626" />
               <Stat label="OWASP Categories" value={`${run.owaspAffected}/${run.owaspTotal}`} />
@@ -146,7 +155,7 @@ export default function ReportPreview() {
           <Section title="4 · Overall Security Posture & 5 · Risk Score">
             <div className="grid grid-cols-2 gap-8 items-center">
               <div className="text-center">
-                <div className="text-6xl font-extrabold" style={{ color: severityColor[run.severity]?.text ?? '#0a0e17' }}>{run.risk}</div>
+                <div className="text-6xl font-extrabold" style={{ color: PRINT_SEVERITY[run.severity] ?? '#0a0e17' }}>{run.risk}</div>
                 <div className="text-sm text-[#5a6478]">out of 100 · {run.severity} RISK</div>
               </div>
               <div className="space-y-2">
@@ -215,7 +224,7 @@ export default function ReportPreview() {
                 </span>
               ))}
             </div>
-            <div className="text-sm mt-3">Attack Chain Risk: <span className="font-bold" style={{ color: severityColor[chainSummary.riskLevel]?.text ?? '#0a0e17' }}>{chainSummary.risk}/100</span> · Furthest phase a defence failed at: <span className="font-bold">{chainSummary.worstPhaseName ?? '—'}</span></div>
+            <div className="text-sm mt-3">Attack Chain Risk: <span className="font-bold" style={{ color: PRINT_SEVERITY[chainSummary.riskLevel] ?? '#0a0e17' }}>{chainSummary.risk}/100</span> · Furthest phase a defence failed at: <span className="font-bold">{chainSummary.worstPhaseName ?? '—'}</span></div>
           </Section>
 
           {/* Evidence */}

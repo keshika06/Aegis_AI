@@ -37,7 +37,7 @@ export default function Findings() {
             key={t}
             onClick={() => setTab(t)}
             className={`px-3 py-1.5 rounded-lg text-xs font-bold uppercase tracking-wide transition-colors ${
-              tab === t ? 'bg-brand text-white' : 'bg-base-card text-slate-400 hover:text-slate-200 border border-base-border'
+              tab === t ? 'bg-brand text-white' : 'bg-base-card text-content-muted hover:text-content border border-base-border'
             }`}
           >
             {t} <span className="opacity-70 ml-1">{counts[t]}</span>
@@ -45,12 +45,12 @@ export default function Findings() {
         ))}
         <div className="flex-1" />
         <div className="relative w-64">
-          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
+          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-content-dim" />
           <input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Search findings..."
-            className="w-full bg-base-card border border-base-border rounded-lg pl-8 pr-3 py-1.5 text-[13px] text-slate-200 placeholder:text-slate-500 focus:outline-none focus:border-brand/60"
+            className="w-full bg-base-card border border-base-border rounded-lg pl-8 pr-3 py-1.5 text-[13px] text-content placeholder:text-content-dim focus:outline-none focus:border-brand/60"
           />
         </div>
       </div>
@@ -59,7 +59,7 @@ export default function Findings() {
         <div className="overflow-x-auto">
           <table className="w-full text-[13px]">
             <thead>
-              <tr className="text-left text-[11px] uppercase text-slate-500 border-b border-base-border">
+              <tr className="text-left text-[11px] uppercase text-content-dim border-b border-base-border">
                 <th className="py-2 pr-3 font-semibold">Finding ID</th>
                 <th className="py-2 pr-3 font-semibold">Title</th>
                 <th className="py-2 pr-3 font-semibold">OWASP</th>
@@ -76,19 +76,19 @@ export default function Findings() {
               {filtered.map((f) => (
                 <tr key={f.id} className="border-b border-base-border last:border-0 hover:bg-base-card2">
                   <td className="py-2.5 pr-3"><Link to={`/findings/${f.id}`} className="mono text-brand font-semibold">{f.id}</Link></td>
-                  <td className="py-2.5 pr-3 text-slate-200"><Link to={`/findings/${f.id}`}>{f.title}</Link></td>
-                  <td className="py-2.5 pr-3 mono text-slate-400">{f.owasp}</td>
+                  <td className="py-2.5 pr-3 text-content"><Link to={`/findings/${f.id}`}>{f.title}</Link></td>
+                  <td className="py-2.5 pr-3 mono text-content-muted">{f.owasp}</td>
                   <td className="py-2.5 pr-3"><SeverityBadge level={f.severity} /></td>
-                  <td className="py-2.5 pr-3 font-bold text-white">{f.risk}</td>
-                  <td className="py-2.5 pr-3 text-slate-400">{f.confidence}%</td>
-                  <td className="py-2.5 pr-3 text-slate-400">{f.attackType}</td>
-                  <td className="py-2.5 pr-3 text-slate-400">{f.evidence}</td>
+                  <td className="py-2.5 pr-3 font-bold text-content">{f.risk}</td>
+                  <td className="py-2.5 pr-3 text-content-muted">{f.confidence}%</td>
+                  <td className="py-2.5 pr-3 text-content-muted">{f.attackType}</td>
+                  <td className="py-2.5 pr-3 text-content-muted">{f.evidence}</td>
                   <td className="py-2.5 pr-3"><SeverityBadge level={f.verdict} /></td>
-                  <td className="py-2.5 pr-3 mono text-slate-500 text-xs">{f.lastSeen}</td>
+                  <td className="py-2.5 pr-3 mono text-content-dim text-xs">{f.lastSeen}</td>
                 </tr>
               ))}
               {filtered.length === 0 && (
-                <tr><td colSpan={10} className="py-8 text-center text-slate-500">No findings match this filter.</td></tr>
+                <tr><td colSpan={10} className="py-8 text-center text-content-dim">No findings match this filter.</td></tr>
               )}
             </tbody>
           </table>
