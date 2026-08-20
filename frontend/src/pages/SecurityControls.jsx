@@ -1,6 +1,9 @@
+import { useState } from 'react'
+import { ChevronDown, ChevronRight, Wrench, ShieldPlus, Radar } from 'lucide-react'
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, PieChart, Pie, Cell } from 'recharts'
 import { PageHeader, Panel } from '../components/Panel'
-import { controlResults, outcomeDistribution, run } from '../data/scanData'
+import SeverityBadge from '../components/SeverityBadge'
+import { controlResults, outcomeDistribution, run, attackScenarios } from '../data/scanData'
 
 // A high acceptance rate means the target let that representation through.
 function rateColor(rate) {
@@ -9,7 +12,27 @@ function rateColor(rate) {
   return '#22c55e'
 }
 
+function Remedy({ icon: Icon, title, items, colour }) {
+  if (!items || items.length === 0) return null
+  return (
+    <div>
+      <div className="flex items-center gap-1.5 text-[11px] uppercase tracking-wide font-bold mb-2" style={{ color: colour }}>
+        <Icon size={13} /> {title}
+      </div>
+      <ol className="space-y-1.5">
+        {items.map((t, i) => (
+          <li key={i} className="flex gap-2.5 text-[12px] text-slate-300 leading-relaxed">
+            <span className="mono text-[10px] shrink-0 mt-0.5" style={{ color: colour }}>{String(i + 1).padStart(2, '0')}</span>
+            <span>{t}</span>
+          </li>
+        ))}
+      </ol>
+    </div>
+  )
+}
+
 export default function SecurityControls() {
+  const [expanded, setExpanded] = useState(attackScenarios[0]?.id ?? null)
   const noControlObserved = run.baseRejectedCases === 0
 
   return (
@@ -92,6 +115,70 @@ export default function SecurityControls() {
           </div>
         </Panel>
       </div>
+
+      <Panel title={`Remediation by attack scenario — ${attackScenarios.length} objective${attackScenarios.length === 1 ? '' : 's'}`} className="mb-5">
+        <p className="text-[13px] text-slate-400 mb-4">
+          Grouped by objective rather than by probe: several representations of one weakness are
+          one thing to fix. Each scenario's guidance is derived from what that attack actually did
+          — the contract rule that broke, the runtime events the target emitted, its control
+          decision, and the representation that got through — so no two scenarios carry the same
+          advice unless they genuinely earned it.
+        </p>
+
+        <div className="space-y-2">
+          {attackScenarios.length === 0 && (
+            <div className="text-sm text-slate-500 py-6 text-center">
+              No confirmed attack scenarios in this scan, so there is nothing to remediate.
+            </div>
+          )}
+
+          {attackScenarios.map((sc) => {
+            const isOpen = expanded === sc.id
+            return (
+              <div key={sc.id} className="border border-base-border rounded-lg overflow-hidden">
+                <button
+                  onClick={() => setExpanded(isOpen ? null : sc.id)}
+                  className="w-full flex items-center gap-3 p-3 hover:bg-base-card2 transition-colors text-left"
+                >
+                  {isOpen ? <ChevronDown size={14} className="text-slate-500 shrink-0" />
+                          : <ChevronRight size={14} className="text-slate-500 shrink-0" />}
+                  <SeverityBadge level={sc.severity} />
+                  <span className="flex-1 min-w-0">
+                    <span className="block text-[13px] text-slate-200 truncate">{sc.title}</span>
+                    <span className="block text-[11px] text-slate-500 truncate">{sc.summary}</span>
+                  </span>
+                  <span className="hidden md:flex items-center gap-3 text-[11px] text-slate-500 shrink-0">
+                    <span className="mono">{sc.owasp ?? '—'}</span>
+                    <span>{sc.probes} probe{sc.probes === 1 ? '' : 's'}</span>
+                  </span>
+                  <span className="mono text-sm font-bold text-white w-10 text-right shrink-0">{sc.risk}</span>
+                </button>
+
+                {isOpen && (
+                  <div className="px-4 pb-4 pt-3 bg-base-card2/40 border-t border-base-border space-y-4">
+                    <div className="flex flex-wrap gap-1.5">
+                      {sc.transformations.map((t) => (
+                        <span key={t} className="mono text-[10px] px-2 py-0.5 rounded border border-base-border text-slate-400">
+                          {t === 'none' ? 'sent as written' : t}
+                        </span>
+                      ))}
+                      {sc.boundaries.map((b) => (
+                        <span key={b} className="mono text-[10px] px-2 py-0.5 rounded border border-sev-critical/40 text-sev-critical">
+                          {b}
+                        </span>
+                      ))}
+                    </div>
+
+                    <Remedy icon={Wrench} title="Mitigation — restore the broken invariant" items={sc.mitigations} colour="#ef4444" />
+                    <Remedy icon={ShieldPlus} title="Preventive — stop it reaching that point" items={sc.preventive} colour="#f97316" />
+                    <Remedy icon={Radar} title="Detection — catch a recurrence" items={sc.detection} colour="#3b82f6" />
+                  </div>
+                )}
+              </div>
+            )
+          })}
+        </div>
+      </Panel>
 
       <Panel title="Reading these numbers">
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">

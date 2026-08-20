@@ -49,6 +49,12 @@ export const targetProfile = scan.targetProfile ?? { url: '—', type: '—', en
 // knowledge, so this reports what was actually measured.
 export const controlResults = scan.controlResults ?? []
 
+// One row per attack objective, carrying the remediation that objective earned.
+// Derived from the contract rules that fired, the runtime events the target
+// emitted, its control decision and the representation that got through — so
+// two scenarios differing in any of those carry different guidance.
+export const attackScenarios = scan.attackScenarios ?? []
+
 // Real decomposition of the risk score. The model multiplies likelihood by
 // impact and scales by evidence confidence, so there is no single additive
 // contribution per factor and presenting one would be a fabrication. What is

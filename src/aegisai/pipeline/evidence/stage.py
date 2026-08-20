@@ -15,17 +15,21 @@ from dataclasses import dataclass
 
 from sqlalchemy import select
 
+from aegisai.knowledge_base.remediation import Remediation, RemediationInputs
+from aegisai.knowledge_base.remediation import build as build_remediation
 from aegisai.models.attack import AttackCase, AttackVariant
 from aegisai.models.enums import (
     DETERMINISTIC_EVIDENCE,
     ControlVerdict,
     EvidenceType,
     FindingVerdict,
+    RuntimeEventType,
     Stage,
 )
 from aegisai.models.execution import ControlEvaluation
 from aegisai.models.finding import Evidence, Finding
 from aegisai.models.policy import Violation
+from aegisai.models.runtime import RuntimeEvent
 from aegisai.pipeline.base import ScanContext, StageResult
 from aegisai.pipeline.evidence.canary import find_canaries
 from aegisai.pipeline.evidence.pii import detect as detect_pii
@@ -89,6 +93,12 @@ class EvidenceStage:
         ):
             violations_by_variant.setdefault(violation.variant_id or "", []).append(violation)
 
+        events_by_variant: dict[str, list[RuntimeEvent]] = {}
+        for event in ctx.session.scalars(
+            select(RuntimeEvent).where(RuntimeEvent.scan_id == ctx.scan_id)
+        ):
+            events_by_variant.setdefault(event.variant_id or "", []).append(event)
+
         counts: dict[str, int] = {}
         for evaluation in evaluations:
             # Only probes the target accepted can have produced impact. A rejected
@@ -105,6 +115,14 @@ class EvidenceStage:
                 continue
 
             verdict, confidence = fuse(signals)
+            probe_events = events_by_variant.get(evaluation.variant_id, [])
+            remediation = self._remediation(
+                violations_by_variant.get(evaluation.variant_id, []),
+                probe_events,
+                evaluation,
+                variant,
+                signals,
+            )
             finding = Finding(
                 scan_id=ctx.scan_id,
                 variant_id=evaluation.variant_id,
@@ -116,8 +134,19 @@ class EvidenceStage:
                 ),
                 owasp_tag=case.owasp_tag if case else None,
                 confidence=confidence,
-                mitigation=self._mitigation(case),
-                extra={"intent": case.original_intent if case else None},
+                # The headline stays a single string for the CLI and reports;
+                # the layered detail rides in `extra` so a reader can see the
+                # preventive and detection work as well as the direct fix.
+                mitigation=remediation.mitigations[0] if remediation.mitigations else None,
+                extra={
+                    "intent": case.original_intent if case else None,
+                    "remediation": {
+                        "summary": remediation.summary,
+                        "mitigations": remediation.mitigations,
+                        "preventive": remediation.preventive,
+                        "detection": remediation.detection,
+                    },
+                },
             )
             ctx.session.add(finding)
             ctx.session.flush()
@@ -228,13 +257,41 @@ class EvidenceStage:
         return f"{category} — {case.original_intent.replace('_', ' ')}"
 
     @staticmethod
-    def _mitigation(case: AttackCase | None) -> str:
-        if case and case.category == "prompt_injection":
-            return (
-                "Do not place secrets in the system prompt. Separate instructions from "
-                "user input, and add an output filter that redacts known secret patterns."
+    def _remediation(
+        violations: list[Violation],
+        events: list[RuntimeEvent],
+        evaluation: ControlEvaluation,
+        variant: AttackVariant | None,
+        signals: list[Signal],
+    ) -> Remediation:
+        """Derive remediation from what this probe actually did.
+
+        Composed from the contract rules that fired, the runtime events the
+        target emitted, its control decision and the representation that got
+        through — so two findings differing in any of those get different
+        guidance. The previous version chose between two fixed paragraphs on one
+        `if`, which gave a 174-finding scan 2 distinct mitigations.
+        """
+        tools, unauthorized = [], []
+        for event in events:
+            if event.event_type != RuntimeEventType.TOOL_CALL:
+                continue
+            payload = event.payload or {}
+            if name := payload.get("tool"):
+                tools.append(str(name))
+                if payload.get("authorized") is False:
+                    unauthorized.append(str(name))
+
+        return build_remediation(
+            RemediationInputs(
+                rules=[v.rule or "" for v in violations],
+                boundaries=[v.boundary for v in violations],
+                observed=[v.observed or "" for v in violations],
+                event_types=[e.event_type for e in events],
+                tools_called=tools,
+                unauthorized_tools=unauthorized,
+                control_verdict=evaluation.verdict,
+                transformation=variant.transformation if variant else None,
+                evidence_types=[s.evidence_type for s in signals],
             )
-        return (
-            "Add input validation and an output filter, and constrain the model's "
-            "role so instruction-override attempts cannot change its behaviour."
         )

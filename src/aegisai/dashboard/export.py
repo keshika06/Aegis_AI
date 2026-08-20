@@ -194,6 +194,9 @@ def build(session: Session, scan_id: str) -> dict[str, Any]:
             violations,
         ),
         "controlResults": _control_results(metrics),
+        "attackScenarios": _scenarios(
+            findings, risks, variants, cases, {e.id: e for e in evaluations}, violations, events
+        ),
         "outcomeDistribution": _outcomes(evaluations),
         "regression": _regression(session, scan, target),
         "recommendedActions": _actions(findings),
@@ -1204,6 +1207,94 @@ def _evidence(evidence, findings, variants, evaluations, violations) -> list[dic
         )
     # Deterministic proof first — that is what a reader needs to see.
     return sorted(rows, key=lambda r: (not r["deterministic"], -r["confidence"]))
+
+
+def _scenarios(findings, risks, variants, cases, evaluations, violations, events) -> list[dict]:
+    """One row per attack objective, with the remediation it actually earned.
+
+    Grouped by attack case rather than by probe: twelve representations of one
+    objective are one scenario to remediate, and listing each separately buries
+    the point under near-identical rows.
+
+    Remediation is unioned across the objective's findings, preserving order and
+    dropping repeats, so a scenario whose probes crossed different boundaries
+    carries guidance for each of them.
+    """
+    violations_by_variant: dict[str, list] = {}
+    for violation in violations:
+        violations_by_variant.setdefault(violation.variant_id or "", []).append(violation)
+
+    events_by_variant: dict[str, list] = {}
+    for event in events:
+        events_by_variant.setdefault(event.variant_id or "", []).append(event)
+
+    grouped: dict[str, list] = {}
+    for finding in findings:
+        variant = variants.get(finding.variant_id or "")
+        key = variant.attack_case_id if variant else f"unattributed:{finding.id}"
+        grouped.setdefault(key, []).append(finding)
+
+    rows = []
+    for case_id, group in grouped.items():
+        case = cases.get(case_id)
+        worst = max(group, key=lambda f: risks[f.id].score if f.id in risks else 0)
+        risk = risks.get(worst.id)
+
+        # Union the layered remediation across the objective's findings.
+        merged: dict[str, list[str]] = {"mitigations": [], "preventive": [], "detection": []}
+        summaries: list[str] = []
+        for finding in group:
+            block = (finding.extra or {}).get("remediation") or {}
+            if summary := block.get("summary"):
+                if summary not in summaries:
+                    summaries.append(summary)
+            for field in merged:
+                for item in block.get(field) or []:
+                    if item not in merged[field]:
+                        merged[field].append(item)
+
+        verdicts: dict[str, int] = {}
+        boundaries: dict[str, None] = {}
+        families: dict[str, None] = {}
+        observed_events: dict[str, None] = {}
+        for finding in group:
+            evaluation = evaluations.get(finding.control_evaluation_id or "")
+            if evaluation:
+                label = VERDICT_LABEL.get(evaluation.verdict, evaluation.verdict)
+                verdicts[label] = verdicts.get(label, 0) + 1
+            variant = variants.get(finding.variant_id or "")
+            if variant:
+                families.setdefault(variant.transformation, None)
+            for violation in violations_by_variant.get(finding.variant_id or "", []):
+                boundaries.setdefault(violation.boundary, None)
+            for event in events_by_variant.get(finding.variant_id or "", []):
+                observed_events.setdefault(event.event_type, None)
+
+        rows.append(
+            {
+                "id": _short(case_id, "SC"),
+                "caseId": case_id,
+                "title": worst.title,
+                "objective": (case.original_intent if case else None),
+                "category": (case.category if case else None),
+                "owasp": worst.owasp_tag,
+                "owaspName": owasp_name(worst.owasp_tag),
+                "severity": risk.risk_level if risk else "LOW",
+                "risk": _pct(risk.score if risk else 0),
+                "verdict": worst.verdict,
+                "probes": len(group),
+                "outcomes": verdicts,
+                "boundaries": list(boundaries),
+                "transformations": list(families),
+                "events": list(observed_events),
+                "findingIds": [_short(f.id, "F") for f in group],
+                "summary": summaries[0] if summaries else None,
+                "mitigations": merged["mitigations"],
+                "preventive": merged["preventive"],
+                "detection": merged["detection"],
+            }
+        )
+    return sorted(rows, key=lambda r: r["risk"], reverse=True)
 
 
 def _control_results(metrics) -> list[dict]:
