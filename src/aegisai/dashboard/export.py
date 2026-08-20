@@ -734,8 +734,13 @@ def _chain_nodes(chains, findings, risks) -> list[dict]:
 EVENT_LABEL = {
     "llm_io": "Model answered",
     "tool_call": "Privileged action ran",
-    "retrieval": "Documents retrieved",
-    "authz": "Authorization decision",
+    # Keys are the emitted event_type verbatim. The earlier "retrieval"/"authz"
+    # spellings never matched anything a target sends, so those rows fell back
+    # to the title-cased type name.
+    "rag_retrieval": "Documents retrieved",
+    "authz_decision": "Authorization decision",
+    "cross_tenant_retrieval": "Another tenant's document returned",
+    "document_ingested": "Corpus written to",
 }
 
 
@@ -758,10 +763,13 @@ def _timeline(events, variants) -> list[dict]:
             args = payload.get("arguments") or {}
             authorized = payload.get("authorized")
             detail = f"{tool}({', '.join(f'{k}={v}' for k, v in args.items())})"
+            # The limit that was breached is named where the target reported one;
+            # not every privileged action has a numeric ceiling to quote.
+            limit = payload.get("max_authorized_percent") or payload.get("authorized_domain")
             note = (
                 "within policy"
                 if authorized
-                else f"EXCEEDS POLICY (max {payload.get('max_authorized_percent')})"
+                else (f"EXCEEDS POLICY (allowed: {limit})" if limit else "NOT AUTHORIZED")
             )
         elif kind == "llm_io":
             detail = (payload.get("output") or "").strip().replace("\n", " ")[:140]
