@@ -1,11 +1,17 @@
 import { Link } from 'react-router-dom'
-import { ShieldAlert, ListChecks, Crosshair, Grid3x3, ShieldOff, CheckCircle2, ArrowRight, GitBranch } from 'lucide-react'
+import {
+  ShieldAlert, ListChecks, Crosshair, Grid3x3, ShieldOff, CheckCircle2,
+  ArrowRight, GitBranch
+} from 'lucide-react'
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, PieChart, Pie, Cell } from 'recharts'
 import { PageHeader, Panel, Bar } from '../components/Panel'
 import KpiCard from '../components/KpiCard'
 import RiskGauge from '../components/RiskGauge'
 import SeverityBadge from '../components/SeverityBadge'
-import { run, riskRuns, owaspCategories, findings, riskComponents, severityColor, chainSummary, attackChains } from '../data/scanData'
+import {
+  run, riskRuns, owaspCategories, findings, riskComponents, severityColor,
+  chainSummary, attackChains, recommendedActions
+} from '../data/scanData'
 
 const donutData = [
   { name: 'Critical', value: run.critical, color: severityColor.CRITICAL.text },
@@ -14,14 +20,24 @@ const donutData = [
   { name: 'Low', value: run.low, color: severityColor.LOW.text }
 ]
 
+// Likelihood and impact multiply, so a reader comparing a factor against the
+// wrong axis would draw the wrong conclusion about which one to fix.
 const AXIS_TITLE = {
   likelihood: 'Likelihood — how readily this path is walked again',
   impact: 'Impact — what it costs when it is'
 }
 
+const PHASE_STYLE = {
+  failed: { borderColor: '#5c2026', background: '#3a1518', color: '#ef4444' },
+  ok: { borderColor: '#1c4d2e', background: '#12301d', color: '#22c55e' },
+  info: { borderColor: '#2a3348', background: '#1c2333', color: '#94a3b8' }
+}
+
 export default function Dashboard() {
   const topOwasp = [...owaspCategories].filter((o) => o.findings > 0).sort((a, b) => b.risk - a.risk).slice(0, 5)
-  const topFindings = [...findings].sort((a, b) => b.risk - a.risk).slice(0, 5)
+  const topFindings = [...findings].sort((a, b) => b.risk - a.risk).slice(0, 8)
+  // No prior scan means no delta. Subtracting from null yields the current
+  // score itself, which would read as a change that never happened.
   const hasBaseline = run.previousRisk !== null && run.previousRisk !== undefined
   const delta = hasBaseline ? run.risk - run.previousRisk : null
   const worstChain = attackChains[0] ?? null
@@ -30,7 +46,7 @@ export default function Dashboard() {
     <div>
       <PageHeader
         title="Security Command Center"
-        subtitle="Evidence-driven security posture and AI application validation overview."
+        subtitle="Evidence-driven security posture for the current AI application validation run."
         right={
           <div>
             <div className="mono text-brand font-bold text-sm">{run.id}</div>
@@ -39,25 +55,34 @@ export default function Dashboard() {
         }
       />
 
-      <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-4 mb-6">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
         <KpiCard
           icon={ShieldAlert}
           label="Posture Score"
-          value={run.risk}
-          sub={hasBaseline ? `${run.severity} · vs previous run` : `${run.severity} · first run`}
-          delta={delta}
+          value={`${run.risk}/100`}
+          sub={run.severity}
+          trend={hasBaseline ? `${Math.abs(delta)} from previous` : null}
+          trendUp={delta > 0}
         />
-        <KpiCard icon={ListChecks} label="Total Findings" value={run.totalFindings} sub={`${run.critical} Critical · ${run.high} High`} />
+        <KpiCard icon={ListChecks} label="Total Findings" value={run.totalFindings} sub={`${run.confirmed} confirmed`} />
+        <KpiCard icon={Crosshair} label="Critical" value={run.critical} valueColor="#ef4444" sub={`${run.high} high · ${run.medium} medium`} />
         <KpiCard
           icon={Crosshair}
           label="Attack Success Rate"
           value={run.attackSuccessRate === null ? '—' : `${run.attackSuccessRate}%`}
           sub="objectives confirmed"
-          delta={run.attackSuccessDelta}
-          deltaSuffix="%"
+          trend={run.attackSuccessDelta !== null && run.attackSuccessDelta !== undefined ? `${Math.abs(run.attackSuccessDelta)}%` : null}
+          trendUp={run.attackSuccessDelta > 0}
         />
         <KpiCard icon={Grid3x3} label="OWASP Coverage" value={`${run.owaspAffected}/${run.owaspTotal}`} sub="categories affected" />
-        <KpiCard icon={ShieldOff} label="Guardrail Evasion" value={`${run.guardrailEvasion}%`} valueColor="#ef4444" sub={run.baseRejectedCases === 0 ? 'no input control observed' : 'successful bypasses'} />
+        <KpiCard icon={GitBranch} label="Attack Chains" value={run.attackChains} sub="objectives reaching a finding" />
+        <KpiCard
+          icon={ShieldOff}
+          label="Guardrail Evasion"
+          value={`${run.guardrailEvasion}%`}
+          valueColor="#ef4444"
+          sub={run.baseRejectedCases === 0 ? 'no input control observed' : 'successful bypasses'}
+        />
         <KpiCard
           icon={CheckCircle2}
           label="Evidence Confidence"
@@ -93,7 +118,11 @@ export default function Dashboard() {
           )}
         </Panel>
 
-        <Panel title="What drove the worst finding's score" className="lg:col-span-2">
+        <Panel
+          title="What drove the worst finding's score"
+          className="lg:col-span-2"
+          right={<Link to="/explainability" className="text-xs text-brand font-semibold flex items-center gap-1">Full attribution <ArrowRight size={12} /></Link>}
+        >
           {riskComponents.length === 0 && <div className="text-sm text-slate-500">No scored findings in this scan.</div>}
           {['likelihood', 'impact'].map((axis) => {
             const rows = riskComponents.filter((c) => c.axis === axis && c.established)
@@ -149,12 +178,20 @@ export default function Dashboard() {
         </Panel>
       </div>
 
-      <Panel title="OWASP Risk Snapshot" icon={Grid3x3} right={<Link to="/owasp-mapping" className="text-xs text-brand font-semibold flex items-center gap-1">View Full OWASP Mapping <ArrowRight size={12} /></Link>} className="mb-6">
+      <Panel
+        title="OWASP Exposure"
+        icon={Grid3x3}
+        right={<Link to="/owasp-mapping" className="text-xs text-brand font-semibold flex items-center gap-1">View Full Mapping <ArrowRight size={12} /></Link>}
+        className="mb-6"
+      >
         <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
           {topOwasp.length === 0 && <div className="text-sm text-slate-500">No OWASP category was affected in this scan.</div>}
           {topOwasp.map((o) => (
             <Link key={o.id} to="/owasp-mapping" className="p-3 rounded-lg border border-base-border bg-base-card2 hover:border-brand/50 transition-colors">
-              <div className="mono text-xs font-bold text-slate-300 mb-1">{o.id}</div>
+              <div className="flex items-center justify-between mb-1">
+                <span className="mono text-xs font-bold text-slate-300">{o.id}</span>
+                {o.isNew && <span className="text-[9px] font-bold text-sev-high">NEW</span>}
+              </div>
               <div className="text-[11px] text-slate-500 mb-2 truncate">{o.name}</div>
               <SeverityBadge level={o.severity} />
               <div className="text-xs text-slate-400 mt-2">{o.findings} finding{o.findings !== 1 ? 's' : ''}</div>
@@ -163,7 +200,12 @@ export default function Dashboard() {
         </div>
       </Panel>
 
-      <Panel title="Top Security Findings" icon={Crosshair} right={<Link to="/findings" className="text-xs text-brand font-semibold flex items-center gap-1">View All Findings <ArrowRight size={12} /></Link>} className="mb-6">
+      <Panel
+        title="Top Security Findings"
+        icon={Crosshair}
+        right={<Link to="/findings" className="text-xs text-brand font-semibold flex items-center gap-1">View All {run.totalFindings} Findings <ArrowRight size={12} /></Link>}
+        className="mb-6"
+      >
         <div className="overflow-x-auto">
           <table className="w-full text-[13px]">
             <thead>
@@ -184,7 +226,7 @@ export default function Dashboard() {
               {topFindings.map((f) => (
                 <tr key={f.id} className="border-b border-base-border last:border-0 hover:bg-base-card2">
                   <td className="py-2.5 pr-3"><Link to={`/findings/${f.id}`} className="mono text-brand font-semibold">{f.id}</Link></td>
-                  <td className="py-2.5 pr-3 text-slate-200">{f.title}</td>
+                  <td className="py-2.5 pr-3 text-slate-200"><Link to={`/findings/${f.id}`}>{f.title}</Link></td>
                   <td className="py-2.5 pr-3 mono text-slate-400">{f.owasp}</td>
                   <td className="py-2.5 pr-3"><SeverityBadge level={f.severity} /></td>
                   <td className="py-2.5 pr-3 font-bold text-white">{f.risk}</td>
@@ -197,49 +239,59 @@ export default function Dashboard() {
         </div>
       </Panel>
 
-      <Panel title="Worst Attack Chain" icon={GitBranch} right={<Link to="/attack-chain" className="text-xs text-brand font-semibold flex items-center gap-1">Open Attack Chain Explorer <ArrowRight size={12} /></Link>}>
-        {worstChain ? (
-          <>
-            <div className="text-[13px] text-slate-300 font-semibold mb-3">{worstChain.findingTitle}</div>
-            <div className="flex items-center gap-2 mono text-[12px] text-slate-300 flex-wrap">
-              {worstChain.phases.map((p, i, arr) => (
-                <span key={p.n} className="flex items-center gap-2">
-                  <span
-                    className="px-2.5 py-1 rounded border"
-                    style={
-                      p.status === 'failed'
-                        ? { borderColor: '#5c2026', background: '#3a1518', color: '#ef4444' }
-                        : p.status === 'ok'
-                        ? { borderColor: '#1c4d2e', background: '#12301d', color: '#22c55e' }
-                        : { borderColor: '#2a3348', background: '#1c2333', color: '#94a3b8' }
-                    }
-                    title={p.headline}
-                  >
-                    {p.name}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+        <Panel
+          title="Worst Attack Chain"
+          icon={GitBranch}
+          right={<Link to="/attack-chain" className="text-xs text-brand font-semibold flex items-center gap-1">Explore <ArrowRight size={12} /></Link>}
+        >
+          {worstChain ? (
+            <>
+              <div className="text-[13px] text-slate-300 font-semibold mb-3">{worstChain.findingTitle}</div>
+              <div className="flex items-center gap-1.5 mono text-[11px] text-slate-300 flex-wrap">
+                {worstChain.phases.map((p, i, arr) => (
+                  <span key={p.n} className="flex items-center gap-1.5">
+                    <span className="px-2 py-1 rounded border" style={PHASE_STYLE[p.status] ?? PHASE_STYLE.info} title={p.headline}>
+                      {p.name}
+                    </span>
+                    {i < arr.length - 1 && <span className="text-slate-600">→</span>}
                   </span>
-                  {i < arr.length - 1 && <span className="text-slate-600">→</span>}
-                </span>
-              ))}
-            </div>
-            <div className="flex items-center gap-8 mt-4 pt-3 border-t border-base-border flex-wrap">
-              <div>
-                <div className="text-[11px] text-slate-500">Attack Chain Risk</div>
-                <div className="text-xl font-bold text-sev-critical">{chainSummary.risk}/100</div>
+                ))}
               </div>
-              <div>
-                <div className="text-[11px] text-slate-500">Furthest phase a defence failed at</div>
-                <div className="text-sm font-semibold text-slate-200">{chainSummary.worstPhaseName ?? '—'}</div>
+              <div className="flex items-center gap-6 mt-4 pt-3 border-t border-base-border flex-wrap">
+                <div>
+                  <div className="text-[11px] text-slate-500">Chain Risk</div>
+                  <div className="text-xl font-bold text-sev-critical">{chainSummary.risk}/100</div>
+                </div>
+                <div>
+                  <div className="text-[11px] text-slate-500">Furthest failure</div>
+                  <div className="text-sm font-semibold text-slate-200">{chainSummary.worstPhaseName ?? '—'}</div>
+                </div>
+                <div>
+                  <div className="text-[11px] text-slate-500">Layers breached</div>
+                  <div className="text-sm font-semibold text-slate-200">{chainSummary.breachedLayers}/{chainSummary.totalLayers}</div>
+                </div>
               </div>
-              <div>
-                <div className="text-[11px] text-slate-500">Defence layers breached</div>
-                <div className="text-sm font-semibold text-slate-200">{chainSummary.breachedLayers}/{chainSummary.totalLayers}</div>
+            </>
+          ) : (
+            <div className="text-sm text-slate-500">No attack chain was built for this scan.</div>
+          )}
+        </Panel>
+
+        <Panel title="Recommended Actions" icon={ListChecks}>
+          <div className="space-y-2">
+            {recommendedActions.length === 0 && (
+              <div className="text-sm text-slate-500">No remediation required — no finding reached CONFIRMED.</div>
+            )}
+            {recommendedActions.map((a, i) => (
+              <div key={i} className="flex items-start gap-3 text-[13px] text-slate-300">
+                <span className="mono text-brand font-bold w-5 shrink-0">{String(i + 1).padStart(2, '0')}</span>
+                {a}
               </div>
-            </div>
-          </>
-        ) : (
-          <div className="text-sm text-slate-500">No attack chain was built for this scan.</div>
-        )}
-      </Panel>
+            ))}
+          </div>
+        </Panel>
+      </div>
     </div>
   )
 }

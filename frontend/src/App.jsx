@@ -1,6 +1,5 @@
-import { Routes, Route } from 'react-router-dom'
+import { Routes, Route, Navigate } from 'react-router-dom'
 import Layout from './components/Layout'
-import Overview from './pages/Overview'
 import Dashboard from './pages/Dashboard'
 import AttackChain from './pages/AttackChain'
 import Findings from './pages/Findings'
@@ -18,8 +17,11 @@ export default function App() {
   return (
     <Layout>
       <Routes>
-        <Route path="/" element={<Overview />} />
-        <Route path="/dashboard" element={<Dashboard />} />
+        <Route path="/" element={<Dashboard />} />
+        {/* Overview and Dashboard rendered the same posture gauge, OWASP grid
+            and attack chain. They are one page now; the old path still
+            resolves so existing links and bookmarks do not 404. */}
+        <Route path="/dashboard" element={<Navigate to="/" replace />} />
         <Route path="/attack-chain" element={<AttackChain />} />
         <Route path="/findings" element={<Findings />} />
         <Route path="/findings/:id" element={<FindingDetail />} />

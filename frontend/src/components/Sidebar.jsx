@@ -1,14 +1,13 @@
 import { NavLink } from 'react-router-dom'
 import {
-  ShieldHalf, Eye, LayoutGrid, GitBranch, Crosshair, Grid3x3,
+  ShieldHalf, LayoutGrid, GitBranch, Crosshair, Grid3x3,
   BarChart3, SearchCode, FileStack, ShieldCheck, TrendingUp,
   FileText, CircleDot
 } from 'lucide-react'
 import { run, findings, dataSource } from '../data/scanData'
 
 const nav = [
-  { to: '/', label: 'Overview', icon: Eye },
-  { to: '/dashboard', label: 'Dashboard', icon: LayoutGrid },
+  { to: '/', label: 'Dashboard', icon: LayoutGrid },
   { to: '/attack-chain', label: 'Attack Chain', icon: GitBranch },
   { to: '/findings', label: 'Findings', icon: Crosshair, badge: findings.length },
   { to: '/owasp-mapping', label: 'OWASP Mapping', icon: Grid3x3 },
@@ -35,7 +34,7 @@ export default function Sidebar() {
 
       <div className="px-3 pt-4 pb-2">
         <div className="label-eyebrow px-2 mb-1.5">Active Validation</div>
-        <NavLink to="/dashboard" className="block card !bg-base-card2 px-3 py-2.5 hover:border-brand/50 transition-colors">
+        <NavLink to="/" className="block card !bg-base-card2 px-3 py-2.5 hover:border-brand/50 transition-colors">
           <div className="flex items-center gap-1.5 mono text-[13px] font-semibold text-white">
             <CircleDot size={10} className="text-slate-500" />
             {run.id}

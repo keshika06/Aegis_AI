@@ -3,8 +3,7 @@ import { Download, Clock, AlertTriangle } from 'lucide-react'
 import { run, dataSource, targetProfile, isStale } from '../data/scanData'
 
 const titleMap = {
-  '': 'Overview',
-  'dashboard': 'Dashboard',
+  '': 'Dashboard',
   'attack-chain': 'Attack Chain',
   'findings': 'Findings',
   'owasp-mapping': 'OWASP Mapping',
@@ -19,7 +18,7 @@ const titleMap = {
 export default function Topbar() {
   const { pathname } = useLocation()
   const parts = pathname.split('/').filter(Boolean)
-  const current = titleMap[parts[0] || ''] || 'Overview'
+  const current = titleMap[parts[0] || ''] || 'Dashboard'
 
   return (
     <header className="sticky top-0 z-20 h-14 border-b border-base-border bg-base-bg/95 backdrop-blur flex items-center justify-between px-6 gap-4">
