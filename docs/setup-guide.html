@@ -332,15 +332,22 @@
 <span class="fl">$</span> aegisai risk show &lt;scan-id&gt;           <span class="cm"># every factor and its weight</span></code></pre>
 
       <p><code>risk show</code> prints the arithmetic rather than asserting a number:</p>
-      <pre><code>Top finding factors  Sensitive Disclosure — extract confidential token
-  exploitability        1.00      weight 0.2
-  business_impact       1.00      weight 0.2
-  evidence_confidence   1.00      weight 0.2
-  control_evasion       0.60      weight 0.15
-  data_sensitivity      1.00      weight 0.15
-  chain_severity        0.90      weight 0.1
+      <pre><code>Top finding factors  Vector Weakness — cross tenant retrieval
+  exploitability        1.00      weight 0.45
+  reproducibility       1.00      weight 0.35
+  attack_complexity     1.00      weight 0.2
+  business_impact       1.00      weight 0.4
+  blast_radius          0.85      weight 0.35
+  data_sensitivity      1.00      weight 0.25
 
-<span class="dim">6/6 factors established; weighted mean 9.3/10 -> CRITICAL</span></code></pre>
+<span class="dim">6/6 factors established; likelihood 1.00 x impact 0.95 x confidence 1.0 -> 9.47/10 CRITICAL</span></code></pre>
+
+      <p>The model is <code>risk = likelihood x impact</code>, scaled by how far the evidence can be trusted — not one flat average over every factor. Three factors feed each axis. A weakness has to be <em>both</em> reachable and consequential to score highly, so the score can rank findings instead of pinning every confirmed one near the maximum.</p>
+
+      <div class="callout">
+        <h4>Unmeasured is not zero</h4>
+        <p>A factor the scan could not establish is recorded as <code>UNKNOWN</code> and excluded from its axis, with the remaining weights re-normalised. Scoring an unmeasured factor as "no risk" is how a scanner talks itself into a reassuring answer.</p>
+      </div>
 
       <p>The HTML report has all 16 sections and is the thing to show a judge:</p>
       <pre><code><span class="fl">$</span> open ~/.aegisai/reports/&lt;scan-id&gt;.html</code></pre>

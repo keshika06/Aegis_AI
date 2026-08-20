@@ -170,6 +170,45 @@ Stage names match the architecture diagram, and so do the module names under
 | 10 | Reporting | What does a human need to see? |
 | 11 | Closed-Loop Replay | What do we try next time? |
 
+### How risk is scored
+
+Stage 9 computes `risk = likelihood x impact`, scaled by how far the evidence
+can be trusted. Three factors feed each axis, chosen to be independent of one
+another:
+
+| Axis | Factor | What it measures |
+|---|---|---|
+| Likelihood | `exploitability` | What the target's own control did about the probe |
+| Likelihood | `reproducibility` | How many representations of this objective worked |
+| Likelihood | `attack_complexity` | How much craft the successful representation needed |
+| Impact | `business_impact` | Severity the target's own contract assigns |
+| Impact | `blast_radius` | Who is affected beyond the attacker's own session |
+| Impact | `data_sensitivity` | What actually left the boundary |
+
+A product rather than a flat mean, because under a mean a single high factor
+drags the composite up and nothing pulls it back down — every confirmed finding
+converges on the same near-maximum number and the score stops ranking anything.
+A weakness has to be *both* reachable and consequential to score highly.
+
+Evidence confidence is deliberately not a seventh averaged factor. It is not a
+component of risk but a measure of how far the result can be trusted, so it
+scales the composite instead of contributing to it.
+
+A factor that could not be established is recorded as `UNKNOWN` and excluded
+from its axis, with the remaining weights re-normalised. An unmeasured factor
+scored as "no risk" is how a scanner talks itself into a reassuring answer.
+
+The **posture score** the dashboard shows for a whole scan is 70% the worst
+objective plus 30% the mean across objectives — scored per *objective*, so
+twelve representations of one weakness count once. Reporting the maximum alone
+pinned the headline to whatever single finding scored highest and never moved
+again.
+
+Scores carry a `model_version`. Changing the model bumps it, and anything that
+compares scans across time skips scores from a superseded model rather than
+plotting them on one line — a formula change must never read as a security
+improvement.
+
 ## Development
 
 ```bash

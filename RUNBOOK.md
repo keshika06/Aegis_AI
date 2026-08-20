@@ -162,6 +162,18 @@ aegisai chain show <scan-id>           # correlated exploit paths
 aegisai risk show <scan-id>            # every scoring factor and its weight
 ```
 
+`risk show` prints the arithmetic rather than a bare number. The model is
+`risk = likelihood x impact`, scaled by evidence confidence, with three factors
+feeding each axis — so a weakness has to be both reachable and consequential to
+score highly, and the score can rank findings instead of pinning every confirmed
+one near the maximum. Factors the scan could not establish are listed as
+`UNKNOWN` and excluded from their axis rather than counted as zero risk.
+
+The dashboard's headline **posture score** aggregates per *objective*, not per
+probe: twelve encodings of one weakness are one weakness. It is 70% the worst
+objective plus 30% the mean across objectives, so one severe finding dominates
+without pinning the number.
+
 Reports are written to `~/.aegisai/reports/<scan-id>.{json,html}`. The easiest
 way to open the HTML one — no path to type, and it defaults to your most recent
 scan:
