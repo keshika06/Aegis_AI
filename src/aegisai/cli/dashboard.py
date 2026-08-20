@@ -63,8 +63,55 @@ def _resolve_port(requested: int, *, span: int = 20) -> int:
     )
 
 
-FRONTEND_DIR = Path(__file__).resolve().parents[3] / "frontend"
-DATA_FILE = FRONTEND_DIR / "src" / "data" / "scanData.json"
+DASHBOARD_MARKER = "package.json"
+"""What proves a candidate directory is really the dashboard source."""
+
+
+def _find_frontend() -> Path | None:
+    """Locate the dashboard source, which ships in the repo, not in the wheel.
+
+    Identified by its package.json rather than by the directory merely existing.
+    The previous version counted directories up from __file__, which is correct
+    only for a source checkout: installed non-editable, `parents[3]` lands inside
+    the virtualenv. Exporting then created that path via `mkdir(parents=True)`,
+    so the "frontend not found" guard passed on every later run and npm was
+    handed a directory with no package.json — an error that named npm rather
+    than the actual problem.
+    """
+    candidates = [
+        # Source checkout: src/aegisai/cli/dashboard.py -> repo root.
+        Path(__file__).resolve().parents[3] / "frontend",
+        # Installed non-editable, but invoked from the repo.
+        Path.cwd() / "frontend",
+        Path.cwd(),
+    ]
+    seen = set()
+    for candidate in candidates:
+        if candidate in seen:
+            continue
+        seen.add(candidate)
+        if (candidate / DASHBOARD_MARKER).is_file():
+            return candidate
+    return None
+
+
+FRONTEND_DIR = _find_frontend()
+DATA_FILE = (
+    FRONTEND_DIR / "src" / "data" / "scanData.json" if FRONTEND_DIR else Path("scanData.json")
+)
+
+
+def _require_frontend() -> Path:
+    if FRONTEND_DIR is None:
+        raise AegisError(
+            "The dashboard's frontend was not found.",
+            hint=(
+                "It ships in the repo under frontend/ and is not part of the installed "
+                "package. Run this from a checkout of the repository, or point at the "
+                "data file directly with:  aegisai dashboard export --out <path>"
+            ),
+        )
+    return FRONTEND_DIR
 
 
 def _resolve_scan(session, scan_id: str | None) -> str:
@@ -99,7 +146,13 @@ def export_scan(
         resolved = _resolve_scan(session, scan_id)
         data = build(session, resolved)
 
-    destination = out or DATA_FILE
+    if out is None:
+        _require_frontend()
+        destination = DATA_FILE
+    else:
+        destination = out
+    # Only an explicitly requested path may bring its parent into being. Creating
+    # the default one is what silently manufactured a frontend inside the venv.
     destination.parent.mkdir(parents=True, exist_ok=True)
     destination.write_text(jsonlib.dumps(data, indent=2, default=str), encoding="utf-8")
 
@@ -134,17 +187,12 @@ def serve_dashboard(
     """Export a scan and start the dashboard dev server."""
     app_ctx: AppContext = ctx.obj
 
-    if not FRONTEND_DIR.exists():
-        raise AegisError(
-            f"Frontend not found at {FRONTEND_DIR}.",
-            hint="It ships in the repo under frontend/.",
-        )
+    frontend = _require_frontend()
 
     if not no_export:
         with session_scope(app_ctx.engine()) as session:
             resolved = _resolve_scan(session, scan_id)
             data = build(session, resolved)
-        DATA_FILE.parent.mkdir(parents=True, exist_ok=True)
         DATA_FILE.write_text(jsonlib.dumps(data, indent=2, default=str), encoding="utf-8")
         output.success(app_ctx, f"exported {resolved} ({data['run']['totalFindings']} findings)")
 
@@ -152,12 +200,12 @@ def serve_dashboard(
     if npm is None:
         raise AegisError(
             "npm is not installed, so the dev server cannot start.",
-            hint=f"Install Node.js, then:  cd {FRONTEND_DIR} && npm install && npm run dev",
+            hint=f"Install Node.js, then:  cd {frontend} && npm install && npm run dev",
         )
 
-    if not (FRONTEND_DIR / "node_modules").exists():
+    if not (frontend / "node_modules").exists():
         output.warn(app_ctx, "installing frontend dependencies (first run only)…")
-        result = subprocess.run([npm, "install"], cwd=FRONTEND_DIR, check=False)
+        result = subprocess.run([npm, "install"], cwd=frontend, check=False)
         if result.returncode != 0:
             raise AegisError("npm install failed.", hint="Run it manually to see the error.")
 
@@ -169,6 +217,6 @@ def serve_dashboard(
     app_ctx.console.print("  [dim]Ctrl-C to stop[/dim]\n")
     subprocess.run(
         [npm, "run", "dev", "--", "--port", str(bound), "--strictPort"],
-        cwd=FRONTEND_DIR,
+        cwd=frontend,
         check=False,
     )
