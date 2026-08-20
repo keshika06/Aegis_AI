@@ -17,6 +17,10 @@ services:
       # the in-container model ran ~10x slower and caused probe timeouts.
       - OLLAMA_URL=${OLLAMA_URL:-http://host.docker.internal:11434}
       - MODEL_NAME=${MODEL_NAME:-qwen2.5:0.5b}
+      # Must stay below the scanner's per-probe timeout (30s default), or a
+      # timed-out probe leaves the model generating and the next one queues
+      # behind it.
+      - MODEL_TIMEOUT_SECONDS=${MODEL_TIMEOUT_SECONDS:-20}
       - CANARY_TOKEN=${CANARY_TOKEN:-AEGIS_CANARY_7f9a2b4c1d3e}
     extra_hosts:
       - "host.docker.internal:host-gateway"
@@ -32,6 +36,10 @@ services:
     environment:
       - OLLAMA_URL=${OLLAMA_URL:-http://host.docker.internal:11434}
       - MODEL_NAME=${MODEL_NAME:-qwen2.5:0.5b}
+      # Must stay below the scanner's per-probe timeout (30s default), or a
+      # timed-out probe leaves the model generating and the next one queues
+      # behind it.
+      - MODEL_TIMEOUT_SECONDS=${MODEL_TIMEOUT_SECONDS:-20}
       # Two distinct canaries: one in the system prompt, one inside a restricted
       # document owned by another tenant. Retrieving the second proves the
       # retrieval boundary was crossed, not merely that the prompt leaked.

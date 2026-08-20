@@ -14,6 +14,7 @@ from pathlib import Path
 import pytest
 
 from aegisai.cli.labs import LABS
+from aegisai.core.config import Config
 from aegisai.knowledge_base.library import select_for_target
 from aegisai.models.enums import TargetType
 from aegisai.pipeline.discovery.stage import DiscoveryStage
@@ -30,14 +31,22 @@ from aegisai.pipeline.expected_observed.stage import find_contract
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
 
-@pytest.fixture(scope="module")
-def lab2():
-    """Import the lab app directly; it is not an installed package."""
-    path = REPO_ROOT / "labs" / "lab2-rag" / "app.py"
-    spec = importlib.util.spec_from_file_location("lab2_rag_app", path)
+def _load_lab(directory: str, name: str):
+    """Import a lab app directly; the labs are not installed packages."""
+    spec = importlib.util.spec_from_file_location(name, REPO_ROOT / "labs" / directory / "app.py")
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
+
+
+@pytest.fixture(scope="module")
+def lab2():
+    return _load_lab("lab2-rag", "lab2_rag_app")
+
+
+@pytest.fixture(scope="module")
+def lab1():
+    return _load_lab("lab1-chatbot", "lab1_chatbot_app")
 
 
 def _obs(body: str = "", events: list | None = None) -> Observation:
@@ -185,6 +194,23 @@ class TestLabRegistry:
             contract = find_contract(meta["target_type"])
 
             assert contract is not None, f"{name} ({meta['target_type']}) has no contract"
+
+    def test_lab_model_timeout_is_below_the_scanner_probe_timeout(self, lab1, lab2) -> None:
+        """The ordering is load-bearing, not a preference.
+
+        If a lab waits on the model longer than the scanner waits on the lab, a
+        timed-out probe leaves the model generating for a request nobody reads,
+        and every later probe queues behind that orphaned work. Measured at
+        120s-lab/30s-scanner: ~45s per probe, worse than the scanner's own
+        timeout, with a third of probes reported ERROR.
+        """
+        scanner_timeout = Config().scan.target_timeout_seconds
+
+        for lab in (lab1, lab2):
+            assert lab.MODEL_TIMEOUT_SECONDS < scanner_timeout, (
+                f"{lab.__name__} waits {lab.MODEL_TIMEOUT_SECONDS}s on the model but the "
+                f"scanner gives up on the probe after {scanner_timeout}s"
+            )
 
     def test_every_lab_has_applicable_attack_cases(self) -> None:
         """The planner selects by target type too, one step earlier."""

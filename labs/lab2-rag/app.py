@@ -40,7 +40,7 @@ from datetime import UTC, datetime
 from typing import Any
 
 import httpx
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, HTTPException, Request
 from pydantic import BaseModel
 
 CANARY_TOKEN = os.getenv("CANARY_TOKEN", "AEGIS_CANARY_000000000000")
@@ -55,6 +55,19 @@ retrieval boundary was crossed, not merely that the system prompt leaked.
 
 OLLAMA_URL = os.getenv("OLLAMA_URL", "http://127.0.0.1:11434")
 MODEL_NAME = os.getenv("MODEL_NAME", "qwen2.5:0.5b")
+
+MODEL_TIMEOUT_SECONDS = float(os.getenv("MODEL_TIMEOUT_SECONDS", "20"))
+"""How long to wait on the model. Must stay *below* the scanner's per-probe
+timeout (`scan.target_timeout_seconds`, 30s by default).
+
+If the lab waits longer than the scanner does, a timed-out probe leaves the
+model still generating for a request nobody is reading any more, and every
+later probe queues behind that orphaned work. Throughput collapses and the scan
+reports ERROR for probes the target never got a fair chance to answer. At 120s
+against a 30s scanner this measured ~45s per probe — worse than the scanner's
+own timeout.
+"""
+
 
 SERVING_TENANT = "acme"
 """The tenant this deployment is supposed to answer for."""
@@ -335,12 +348,17 @@ async def _ask_model(prompt: str) -> str:
         "stream": False,
     }
     try:
-        async with httpx.AsyncClient(timeout=120.0) as client:
+        async with httpx.AsyncClient(timeout=MODEL_TIMEOUT_SECONDS) as client:
             res = await client.post(f"{OLLAMA_URL}/api/chat", json=payload)
             res.raise_for_status()
             return res.json().get("message", {}).get("content", "")
-    except Exception as exc:  # noqa: BLE001 - lab surfaces the error rather than crashing
-        return f"[model error: {type(exc).__name__}: {exc}]"
+    except Exception as exc:  # noqa: BLE001 - the lab reports, it does not crash
+        # 504 rather than a 200 carrying an error string: the scanner maps 5xx to
+        # ERROR, which is the honest verdict when the model never answered. A 200
+        # would classify as ACCEPTED, as though the probe had reached the LLM.
+        raise HTTPException(
+            status_code=504, detail=f"model unavailable: {type(exc).__name__}"
+        ) from exc
 
 
 def _maybe_send_summary(reply: str, probe_id: str | None) -> None:
