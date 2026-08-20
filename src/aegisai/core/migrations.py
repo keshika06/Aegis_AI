@@ -35,8 +35,34 @@ def _create_baseline(conn: Connection) -> None:
     Base.metadata.create_all(conn)
 
 
+def _add_risk_model_version(conn: Connection) -> None:
+    """v2 — record which risk model produced each score.
+
+    Existing rows keep 0, meaning "scored before versioning". They are real
+    scores and are not discarded, but they were produced by a different model,
+    so anything comparing scans across time has to exclude them rather than
+    plot them alongside current ones.
+    """
+    if not column_exists(conn, "risk_scores", "model_version"):
+        conn.execute(
+            text("ALTER TABLE risk_scores ADD COLUMN model_version INTEGER NOT NULL DEFAULT 0")
+        )
+
+
+def _add_risk_axes(conn: Connection) -> None:
+    """v3 — store the likelihood/impact/confidence a score was built from.
+
+    Nullable: rows written before this column exists keep NULL, which readers
+    treat as "not recorded" rather than as zeroes.
+    """
+    if not column_exists(conn, "risk_scores", "axes"):
+        conn.execute(text("ALTER TABLE risk_scores ADD COLUMN axes JSON"))
+
+
 MIGRATIONS: list[Migration] = [
     Migration(1, "baseline schema", _create_baseline),
+    Migration(2, "record the risk model version on each score", _add_risk_model_version),
+    Migration(3, "record the axes each risk score was built from", _add_risk_axes),
 ]
 
 

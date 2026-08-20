@@ -144,6 +144,11 @@ def build_payload(ctx: ScanContext) -> dict:
                 "risk_level": r.risk_level,
                 "factors": r.factors,
                 "weights": r.weights,
+                # The two axes the score multiplies, and the confidence it was
+                # scaled by, so the JSON report carries the same arithmetic the
+                # dashboard shows rather than only its result.
+                "axes": r.axes,
+                "model_version": r.model_version,
                 "explanation": r.explanation,
             }
             for r in session.scalars(select(RiskScore).where(RiskScore.scan_id == ctx.scan_id))

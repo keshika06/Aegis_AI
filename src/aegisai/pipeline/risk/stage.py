@@ -4,14 +4,15 @@ from __future__ import annotations
 
 from sqlalchemy import select
 
-from aegisai.models.analysis import AttackChain, RiskScore
+from aegisai.models.analysis import RiskScore
 from aegisai.models.attack import AttackVariant
-from aegisai.models.enums import Stage
+from aegisai.models.enums import ControlVerdict, Stage
 from aegisai.models.execution import ControlEvaluation
 from aegisai.models.finding import Evidence, Finding
 from aegisai.models.policy import Violation
+from aegisai.models.runtime import RuntimeEvent
 from aegisai.pipeline.base import ScanContext, StageResult
-from aegisai.pipeline.risk.scoring import RiskInputs, score
+from aegisai.pipeline.risk.scoring import RISK_MODEL_VERSION, RiskInputs, score
 
 
 class RiskStage:
@@ -32,6 +33,12 @@ class RiskStage:
         ):
             violations_by_variant.setdefault(violation.variant_id or "", []).append(violation)
 
+        events_by_variant: dict[str, set[str]] = {}
+        for event in ctx.session.scalars(
+            select(RuntimeEvent).where(RuntimeEvent.scan_id == ctx.scan_id)
+        ):
+            events_by_variant.setdefault(event.variant_id or "", set()).add(event.event_type)
+
         variants = {
             v.id: v
             for v in ctx.session.scalars(
@@ -45,12 +52,31 @@ class RiskStage:
             )
         }
 
-        chain_severity_by_finding: dict[str, float] = {}
-        for chain in ctx.session.scalars(
-            select(AttackChain).where(AttackChain.scan_id == ctx.scan_id)
-        ):
-            for finding_id in chain.finding_ids or []:
-                chain_severity_by_finding[finding_id] = chain.severity or 0.0
+        # Reproducibility is measured per objective, not per probe: how many of
+        # the representations we sent for this attack case actually landed. One
+        # objective probed twelve ways and landing twice is a very different
+        # weakness from one that landed all twelve times, and the score has to
+        # be able to say so.
+        #
+        # A probe the target never answered is excluded from the denominator. An
+        # ERROR is not evidence that the objective failed, it is the absence of
+        # evidence, and counting it as a failed attempt would understate how
+        # reproducible the weakness is.
+        answered_variants = {
+            e.variant_id for e in evaluations.values() if e.verdict != ControlVerdict.ERROR
+        }
+        tried_per_case: dict[str, int] = {}
+        for variant in variants.values():
+            if variant.id in answered_variants:
+                tried_per_case[variant.attack_case_id] = (
+                    tried_per_case.get(variant.attack_case_id, 0) + 1
+                )
+
+        succeeded_per_case: dict[str, set[str]] = {}
+        for finding in findings:
+            variant = variants.get(finding.variant_id or "")
+            if variant:
+                succeeded_per_case.setdefault(variant.attack_case_id, set()).add(variant.id)
 
         counts: dict[str, int] = {}
         top = 0.0
@@ -58,6 +84,7 @@ class RiskStage:
             variant = variants.get(finding.variant_id or "")
             evaluation = evaluations.get(finding.control_evaluation_id or "")
             violations = violations_by_variant.get(finding.variant_id or "", [])
+            case_id = variant.attack_case_id if variant else None
 
             result = score(
                 RiskInputs(
@@ -68,10 +95,15 @@ class RiskStage:
                     boundary_severities=[
                         str((v.detail or {}).get("severity", "medium")) for v in violations
                     ],
+                    boundary_rules=[v.rule for v in violations if v.rule],
+                    event_types=sorted(events_by_variant.get(finding.variant_id or "", set())),
                     evidence_types=[
                         e.evidence_type for e in evidence_by_finding.get(finding.id, [])
                     ],
-                    chain_severity=chain_severity_by_finding.get(finding.id),
+                    variants_tried=tried_per_case.get(case_id) if case_id else None,
+                    variants_succeeded=(
+                        len(succeeded_per_case.get(case_id, set())) if case_id else None
+                    ),
                 )
             )
 
@@ -81,8 +113,14 @@ class RiskStage:
                     finding_id=finding.id,
                     score=result.score,
                     risk_level=result.level,
+                    model_version=RISK_MODEL_VERSION,
                     factors=result.factors,
                     weights=result.weights,
+                    axes={
+                        "likelihood": result.likelihood,
+                        "impact": result.impact,
+                        "confidence": result.confidence_multiplier,
+                    },
                     explanation=result.explanation,
                 )
             )
