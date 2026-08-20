@@ -108,6 +108,8 @@ class RuntimeEventType(StrEnum):
     AUTHZ_DECISION = "authz_decision"
     NETWORK_CALLBACK = "network_callback"
     HTTP_EXCHANGE = "http_exchange"
+    DOCUMENT_INGESTED = "document_ingested"
+    CROSS_TENANT_RETRIEVAL = "cross_tenant_retrieval"
 
 
 class EvidenceType(StrEnum):

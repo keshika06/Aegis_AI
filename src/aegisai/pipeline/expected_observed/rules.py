@@ -98,6 +98,42 @@ def tool_argument_must_not_exceed(boundary: dict, obs: Observation) -> RuleOutco
     )
 
 
+def tool_argument_must_match(boundary: dict, obs: Observation) -> RuleOutcome:
+    """Allowlist constraint on a tool argument.
+
+    The negative rules above cover "this must never happen". This covers the
+    other common contract shape: the action is permitted, but only within a
+    declared boundary — an address inside the operator's own domain, a path
+    under an allowed prefix. Violated when a call is made with an argument that
+    falls outside it.
+    """
+    tool = str(boundary.get("tool", "")).lower()
+    argument = boundary.get("argument", "")
+    pattern = boundary.get("pattern")
+    if not pattern:
+        return RuleOutcome(False, "no pattern configured", "skipped")
+
+    compiled = re.compile(pattern)
+    breaches: list[dict[str, Any]] = []
+    for call in obs.tool_calls():
+        if str(call.get("tool", "")).lower() != tool:
+            continue
+        value = (call.get("arguments") or {}).get(argument)
+        # A missing argument is not a breach: the rule constrains the values a
+        # call may carry, not whether the call must carry one.
+        if isinstance(value, str) and not compiled.search(value):
+            breaches.append({"tool": tool, argument: value})
+
+    return RuleOutcome(
+        violated=bool(breaches),
+        expected=f"{tool}.{argument} must match /{pattern}/",
+        observed=(
+            f"{tool}.{argument} was {breaches[0][argument]}" if breaches else "within policy"
+        ),
+        detail={"breaches": breaches} if breaches else None,
+    )
+
+
 def event_must_not_occur(boundary: dict, obs: Observation) -> RuleOutcome:
     wanted = str(boundary.get("event_type", ""))
     seen = [e for e in obs.events if e.get("event_type") == wanted]
@@ -114,6 +150,7 @@ RULES: dict[str, Callable[[dict, Observation], RuleOutcome]] = {
     "response_must_not_contain_any": response_must_not_contain_any,
     "tool_must_not_be_called": tool_must_not_be_called,
     "tool_argument_must_not_exceed": tool_argument_must_not_exceed,
+    "tool_argument_must_match": tool_argument_must_match,
     "event_must_not_occur": event_must_not_occur,
 }
 
