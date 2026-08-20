@@ -30,8 +30,12 @@ Requires Python 3.11+.
 ```bash
 python3 -m venv .venv
 source .venv/bin/activate
-pip install -e ".[dev]"
+pip install -e ".[dev]"      # includes what the bundled labs need to run
 ```
+
+Scanning a target needs only the core dependencies. *Hosting* one needs FastAPI
+and uvicorn, so those live in a `labs` extra that `dev` pulls in — install
+`.[labs]` alone if you want to run a lab without the test tooling.
 
 ## Quick start
 
@@ -105,6 +109,38 @@ CI branches on these, so they are part of the public contract.
 | `2` | Usage or configuration error |
 | `3` | Target unreachable, unregistered, or unauthorized |
 | `4` | Missing or unhealthy dependency — run `aegisai doctor` |
+
+## The bundled labs
+
+Two intentionally vulnerable applications, so the pipeline can be demonstrated
+safely and repeatably. Both bind to localhost only and contain synthetic data
+and synthetic canaries exclusively.
+
+```bash
+aegisai labs up          # both
+aegisai labs up lab2     # just one
+aegisai labs status
+```
+
+| Lab | Port | Shape | Tests the path where… |
+|---|---|---|---|
+| `lab1` | 8001 | Customer-support chatbot | …the **user** attacks the model directly |
+| `lab2` | 8002 | RAG knowledge assistant | …a **document** attacks the model, and the user reaches documents they should not |
+
+`lab2` exists because retrieval introduces vulnerability classes a chatbot
+cannot have. Its deliberate flaws, and what makes each one provable rather than
+merely suspicious:
+
+| Flaw | OWASP | Proven by |
+|---|---|---|
+| Retrieval ignores tenant and classification metadata it records | LLM08 | A second canary that exists only in another tenant's restricted document |
+| Retrieved bodies are spliced into the prompt undelimited | LLM01 | Instructions inside a document being obeyed |
+| `POST /ingest` takes no credential | LLM04 | A `document_ingested` runtime event |
+| Model prose is scraped for an email directive | LLM06 | A `send_summary_email` tool call to an attacker-chosen address |
+| No output filtering | LLM05 / LLM02 | A markdown beacon, and synthetic PII from a restricted record |
+
+Each maps to a boundary in `configs/expected-behaviour/lab2-rag.yaml`, so Stage 6
+catches it deterministically rather than by reading the response and guessing.
 
 ## Configuration
 

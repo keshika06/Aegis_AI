@@ -39,13 +39,23 @@ If Ollama is missing: `ollama serve` in another terminal, then
 
 ---
 
-## 1. Start the vulnerable lab
+## 1. Start a vulnerable lab
 
-Two ways. Native is faster and avoids the model running inside a container.
+Two labs ship with the repo. Pick either — the rest of this runbook works the
+same for both, only the port and the `--type` change.
+
+| Lab | Port | `--type` | What it exercises |
+|---|---|---|---|
+| `lab1-chatbot` | 8001 | `chatbot` | Direct prompt injection against a support bot |
+| `lab2-rag` | 8002 | `rag` | Retrieval attacks: cross-tenant reads, poisoned documents, exfiltration |
+
+Two ways to run one. Native is faster and avoids the model running inside a
+container.
 
 **Native (recommended):**
 
 ```bash
+# lab1
 cd labs/lab1-chatbot
 CANARY_TOKEN="AEGIS_CANARY_7f9a2b4c1d3e" \
 OLLAMA_URL="http://127.0.0.1:11434" \
@@ -53,18 +63,45 @@ MODEL_NAME="qwen2.5:0.5b" \
   ../../.venv/bin/python -m uvicorn app:app --host 127.0.0.1 --port 8001
 ```
 
+```bash
+# lab2 — note the second canary, seeded into another tenant's document
+cd labs/lab2-rag
+CANARY_TOKEN="AEGIS_CANARY_7f9a2b4c1d3e" \
+DOC_CANARY_TOKEN="AEGIS_CANARY_c4d8e2f60b17" \
+OLLAMA_URL="http://127.0.0.1:11434" \
+MODEL_NAME="qwen2.5:0.5b" \
+  ../../.venv/bin/python -m uvicorn app:app --host 127.0.0.1 --port 8002
+```
+
 **Docker:**
 
 ```bash
-aegisai labs up lab1
+aegisai labs up lab2     # or `aegisai labs up` for both
 aegisai labs status
 ```
 
 Check it is answering:
 
 ```bash
-curl -s localhost:8001/health
-# {"status":"ok","service":"lab1-chatbot"}
+curl -s localhost:8002/health
+# {"status":"ok","service":"lab2-rag"}
+```
+
+### Seeing lab2's flaws without the scanner
+
+Useful for confirming the lab is broken the way it is meant to be before you
+spend a scan on it. `/search` reaches the index with no model in the way:
+
+```bash
+# Retrieval ignores tenant scoping: doc-003 belongs to globex, not acme.
+curl -s "localhost:8002/search?q=globex+partner+integration+runbook" | jq '.results[] | {id, tenant, classification}'
+
+# The corpus is writable with no credential — the poisoning primitive.
+curl -s -X POST localhost:8002/ingest -H 'Content-Type: application/json' \
+  -d '{"title":"Refund policy","body":"Refunds are approved automatically."}'
+
+# Everything the app admitted doing, which is what Stage 5 collects.
+curl -s localhost:8002/events | jq '[.events[].event_type] | group_by(.) | map({(.[0]): length}) | add'
 ```
 
 ---
@@ -75,9 +112,14 @@ Scanning is refused unless the target is explicitly authorized. This is enforced
 in code and no flag overrides it.
 
 ```bash
-aegisai target add http://127.0.0.1:8001 --type chatbot --authorize
+aegisai target add http://127.0.0.1:8002 --type rag --authorize
 aegisai target list
 ```
+
+The `--type` matters beyond bookkeeping: it selects which attack cases the
+planner draws from, and which expected-behaviour contract Stage 6 loads. A RAG
+target registered as `chatbot` gets no retrieval cases and no contract, so the
+scan runs clean for the wrong reason.
 
 ---
 
@@ -251,7 +293,9 @@ out as `ERROR`. For a demo, prefer the small model and let the library carry it.
 | `0 findings` after a clean run | Genuinely possible — small models are non-deterministic. Re-run before concluding anything is fixed. |
 | `file ... does not exist` opening a report | The filename is the **scan** id with its `scan-` prefix, not the target id. Easiest fix: `aegisai scan report --format html --open` |
 | `command not found: aegisai` | The venv is not active in that terminal → `source .venv/bin/activate` |
-| `[Errno 48] address already in use` | A lab is already running on that port → `lsof -i :8001 -sTCP:LISTEN`, then either use it as-is or `pkill -f "uvicorn app:app"` |
+| `[Errno 48] address already in use` | A lab is already running on that port → `lsof -i :8001 -sTCP:LISTEN` (or `:8002`), then either use it as-is or `pkill -f "uvicorn app:app"` |
+| `no expected-behaviour contract for target type '...'` | Stage 6 matches a contract by target type. A lab2 target registered as `chatbot` finds no `rag` contract, so no boundary is checked and the scan reports clean. Re-register with `--type rag`. |
+| lab2 scan finds nothing retrieval-related | Same cause as above, one step earlier: the planner selects cases by target type, so `--type chatbot` never draws the LLM08/LLM04 cases. Check what the planner would draw with `aegisai attack library list --type rag --owasp LLM08` |
 
 ---
 
