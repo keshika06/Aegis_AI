@@ -61,9 +61,7 @@ def _status_after(monkeypatch: pytest.MonkeyPatch, stage_cls: type) -> str:
         return session.get(Scan, scan_id).status
 
 
-def test_interrupt_marks_the_scan_cancelled(
-    monkeypatch: pytest.MonkeyPatch, initialized
-) -> None:
+def test_interrupt_marks_the_scan_cancelled(monkeypatch: pytest.MonkeyPatch, initialized) -> None:
     assert _status_after(monkeypatch, _Interrupting) == ScanStatus.CANCELLED
 
 

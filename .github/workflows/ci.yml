@@ -25,10 +25,13 @@ jobs:
         run: pip install -e ".[dev]"
 
       - name: Lint
-        run: ruff check src tests
+        # labs/ is included: the labs are not shipped in the wheel, but the test
+        # suite imports them, so they are part of the tested surface and drift
+        # in them breaks the suite like any other source.
+        run: ruff check src tests labs
 
       - name: Format check
-        run: ruff format --check src tests
+        run: ruff format --check src tests labs
 
       - name: Test
         run: pytest tests -q
