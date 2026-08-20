@@ -74,9 +74,9 @@ def run_pipeline(
 ) -> Iterator[StageProgress]:
     """Execute the pipeline, yielding after each stage so callers can render live.
 
-    A stage that raises marks the scan FAILED with the error recorded — a scan is
-    never left stuck in RUNNING, which is what makes stale-scan recovery
-    unnecessary.
+    A stage that raises marks the scan FAILED with the error recorded, and an
+    interrupt marks it CANCELLED — a scan is never left stuck in RUNNING, which
+    is what makes stale-scan recovery unnecessary.
     """
     scan = session.get(Scan, scan_id)
     if scan is None:
@@ -96,18 +96,29 @@ def run_pipeline(
         families=families,
     )
 
+    def _finalise(status: ScanStatus, stage: Stage, error: str) -> None:
+        """Record a terminal state for a scan that did not run to completion."""
+        session.rollback()
+        record = session.get(Scan, scan_id)
+        record.status = status
+        record.current_stage = str(stage)
+        record.error = error
+        record.completed_at = utcnow()
+        session.commit()
+
     for index, stage_cls in enumerate(STAGES, start=1):
         stage = stage_cls()  # type: ignore[operator]
         try:
             result = stage.run(ctx)
         except Exception as exc:  # noqa: BLE001 - any stage failure ends the scan cleanly
-            session.rollback()
-            scan = session.get(Scan, scan_id)
-            scan.status = ScanStatus.FAILED
-            scan.current_stage = str(stage.stage)
-            scan.error = f"{type(exc).__name__}: {exc}"
-            scan.completed_at = utcnow()
-            session.commit()
+            _finalise(ScanStatus.FAILED, stage.stage, f"{type(exc).__name__}: {exc}")
+            raise
+        except BaseException as exc:
+            # Ctrl-C raises KeyboardInterrupt, which is a BaseException and not an
+            # Exception, so the handler above never saw it: an interrupted scan
+            # stayed RUNNING for ever and `scan list` kept reporting it as live.
+            # Same for SystemExit.
+            _finalise(ScanStatus.CANCELLED, stage.stage, f"interrupted: {type(exc).__name__}")
             raise
 
         scan = session.get(Scan, scan_id)
