@@ -2,15 +2,15 @@ import { NavLink } from 'react-router-dom'
 import {
   ShieldHalf, Eye, LayoutGrid, GitBranch, Crosshair, Grid3x3,
   BarChart3, SearchCode, FileStack, ShieldCheck, TrendingUp,
-  FileText, Settings, HelpCircle, CircleDot
+  FileText, CircleDot
 } from 'lucide-react'
-import { run } from '../data/scanData'
+import { run, findings, dataSource } from '../data/scanData'
 
 const nav = [
   { to: '/', label: 'Overview', icon: Eye },
   { to: '/dashboard', label: 'Dashboard', icon: LayoutGrid },
   { to: '/attack-chain', label: 'Attack Chain', icon: GitBranch },
-  { to: '/findings', label: 'Findings', icon: Crosshair, badge: 18 },
+  { to: '/findings', label: 'Findings', icon: Crosshair, badge: findings.length },
   { to: '/owasp-mapping', label: 'OWASP Mapping', icon: Grid3x3 },
   { to: '/risk-analysis', label: 'Risk Analysis', icon: BarChart3 },
   { to: '/explainability', label: 'Explainability', icon: SearchCode },
@@ -37,7 +37,7 @@ export default function Sidebar() {
         <div className="label-eyebrow px-2 mb-1.5">Active Validation</div>
         <NavLink to="/dashboard" className="block card !bg-base-card2 px-3 py-2.5 hover:border-brand/50 transition-colors">
           <div className="flex items-center gap-1.5 mono text-[13px] font-semibold text-white">
-            <CircleDot size={10} className="text-sev-critical pulse-dot" />
+            <CircleDot size={10} className="text-slate-500" />
             {run.id}
           </div>
           <div className="text-[11px] text-slate-500 mt-0.5 truncate">{run.target}</div>
@@ -69,21 +69,13 @@ export default function Sidebar() {
         ))}
       </nav>
 
-      <div className="px-3 py-3 border-t border-base-border space-y-0.5">
-        <button className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-[13px] text-slate-400 hover:text-slate-200 hover:bg-base-card transition-colors">
-          <Settings size={16} /> Settings
-        </button>
-        <button className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-[13px] text-slate-400 hover:text-slate-200 hover:bg-base-card transition-colors">
-          <HelpCircle size={16} /> Support
-        </button>
-        <div className="flex items-center gap-2.5 px-3 pt-3 mt-1 border-t border-base-border">
-          <div className="w-7 h-7 rounded-full bg-base-card2 border border-base-border flex items-center justify-center text-[11px] font-bold text-slate-300">
-            SE
-          </div>
-          <div className="leading-tight">
-            <div className="text-[12px] font-semibold text-slate-200">Security Engineer</div>
-            <div className="text-[10px] text-slate-500">Profile</div>
-          </div>
+      <div className="px-3 py-3 border-t border-base-border">
+        <div className="label-eyebrow px-2 mb-1.5">Data source</div>
+        <div className="px-2 text-[11px] text-slate-500 leading-relaxed mono break-all">
+          {dataSource.scan_id ?? 'no scan exported'}
+        </div>
+        <div className="px-2 text-[10px] text-slate-600 mt-1">
+          {dataSource.generated_at ? `exported ${dataSource.generated_at.replace('T', ' ')}` : 'run: aegisai dashboard export'}
         </div>
       </div>
     </aside>

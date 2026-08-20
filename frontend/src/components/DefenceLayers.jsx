@@ -16,6 +16,10 @@ const CENTER = SIZE / 2
 export default function DefenceLayers({ phases }) {
   const byPhase = Object.fromEntries((phases ?? []).map((p) => [p.n, p]))
   const breached = LAYERS.filter((l) => byPhase[l.phase]?.status === 'failed').length
+  // The centre must not claim the asset was reached when a layer held. Phase 7
+  // is where deterministic proof is recorded, so it is what decides this.
+  const reached = byPhase[7]?.status === 'failed'
+  const assetColour = reached ? '#ef4444' : '#3f4a63'
 
   return (
     <div className="flex flex-col items-center">
@@ -61,17 +65,19 @@ export default function DefenceLayers({ phases }) {
         })}
 
         {/* The asset at the centre */}
-        <circle cx={CENTER} cy={CENTER} r="28" fill="#2a1518" stroke="#ef4444" strokeWidth="2" />
-        <text x={CENTER} y={CENTER - 2} textAnchor="middle" fill="#ef4444"
+        <circle cx={CENTER} cy={CENTER} r="28" fill={reached ? '#2a1518' : '#1c2333'}
+                stroke={assetColour} strokeWidth="2" />
+        <text x={CENTER} y={CENTER - 2} textAnchor="middle" fill={assetColour}
               fontSize="9.5" fontWeight="700">ASSET</text>
         <text x={CENTER} y={CENTER + 10} textAnchor="middle" fill="#8b97b0" fontSize="8">
-          reached
+          {reached ? 'reached' : 'not proven'}
         </text>
 
         {/* Attack vector punching in from the edge */}
         <line x1="6" y1={CENTER} x2={CENTER - 30} y2={CENTER}
-              stroke="#ef4444" strokeWidth="2.5" markerEnd="url(#arrowRedLayer)" />
-        <text x="6" y={CENTER - 9} fill="#ef4444" fontSize="9"
+              stroke={assetColour} strokeWidth="2.5"
+              markerEnd={reached ? 'url(#arrowRedLayer)' : undefined} />
+        <text x="6" y={CENTER - 9} fill={assetColour} fontSize="9"
               fontWeight="700" fontFamily="ui-monospace, monospace">ATTACK</text>
       </svg>
 
@@ -83,7 +89,9 @@ export default function DefenceLayers({ phases }) {
         <div className="text-[11px] text-slate-500 mt-0.5">
           {breached === LAYERS.length
             ? 'Nothing stood between the probe and the asset.'
-            : `${LAYERS.length - breached} layer(s) held, but the attack still reached impact.`}
+            : reached
+            ? `${LAYERS.length - breached} layer(s) held, but the attack still reached impact.`
+            : `${LAYERS.length - breached} layer(s) held, and no deterministic proof of impact was collected.`}
         </div>
       </div>
     </div>

@@ -28,6 +28,11 @@ export default function OwaspMapping() {
   const affected = owaspCategories.filter((o) => o.findings > 0)
   const mostAffected = [...affected].sort((a, b) => b.findings - a.findings)[0]
   const highestRisk = [...affected].sort((a, b) => b.risk - a.risk)[0]
+  // null when the export had no previous scan to compare against, which is a
+  // different statement from "nothing is new".
+  const newlyDetected = owaspCategories.some((o) => o.isNew === null)
+    ? null
+    : owaspCategories.filter((o) => o.isNew)
 
   return (
     <div>
@@ -116,7 +121,25 @@ export default function OwaspMapping() {
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-5">
         <Panel><div className="label-eyebrow mb-1">Most Affected Category</div><div className="text-lg font-bold text-white">{mostAffected?.id}</div><div className="text-xs text-slate-500">{mostAffected?.name} · {mostAffected?.findings} findings</div></Panel>
         <Panel><div className="label-eyebrow mb-1">Highest Risk Category</div><div className="text-lg font-bold text-sev-critical">{highestRisk?.id}</div><div className="text-xs text-slate-500">{highestRisk?.name} · risk {highestRisk?.risk}</div></Panel>
-        <Panel><div className="label-eyebrow mb-1">Newly Detected</div><div className="text-lg font-bold text-sev-high">LLM06</div><div className="text-xs text-slate-500">Excessive Agency · first observed this run</div></Panel>
+        <Panel>
+          <div className="label-eyebrow mb-1">Newly Detected</div>
+          {newlyDetected === null ? (
+            <>
+              <div className="text-lg font-bold text-slate-400">—</div>
+              <div className="text-xs text-slate-500">No previous scan of this target to compare against</div>
+            </>
+          ) : newlyDetected.length === 0 ? (
+            <>
+              <div className="text-lg font-bold text-slate-400">None</div>
+              <div className="text-xs text-slate-500">No category appeared that the previous run did not already show</div>
+            </>
+          ) : (
+            <>
+              <div className="text-lg font-bold text-sev-high">{newlyDetected.map((o) => o.id).join(', ')}</div>
+              <div className="text-xs text-slate-500">{newlyDetected.map((o) => o.name).join(' · ')} — first observed this run</div>
+            </>
+          )}
+        </Panel>
       </div>
 
       <Panel title="OWASP Category Details">
@@ -136,7 +159,7 @@ export default function OwaspMapping() {
               </div>
               <div className="flex items-center justify-between text-[11px]">
                 <span className={`font-bold ${o.status === 'OPEN' ? 'text-sev-high' : 'text-sev-low'}`}>{o.status}</span>
-                <span className="text-slate-500">Trend: {o.trend === 'up' ? '↑' : o.trend === 'down' ? '↓' : '→'}</span>
+                {o.isNew && <span className="font-bold text-sev-high">NEW THIS RUN</span>}
               </div>
             </div>
           ))}

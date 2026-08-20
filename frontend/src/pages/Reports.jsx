@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { FileText, ShieldCheck, Grid3x3, GitBranch, FileStack, Check } from 'lucide-react'
 import { PageHeader, Panel } from '../components/Panel'
-import { run } from '../data/scanData'
+import { run, severityColor } from '../data/scanData'
 
 const reportTypes = [
   { id: 'executive', name: 'Executive Report', icon: ShieldCheck, desc: 'Technical security summary for management.' },
@@ -14,7 +14,7 @@ const reportTypes = [
 
 const sectionOptions = [
   'Executive Summary', 'Risk Score', 'OWASP Mapping', 'Attack Chain',
-  'SHAP Explainability', 'Evidence', 'Security Controls', 'Recommendations', 'Regression Analysis'
+  'Risk Attribution', 'Evidence', 'Target Control Evaluation', 'Recommendations', 'Regression Analysis'
 ]
 
 export default function Reports() {
@@ -56,11 +56,9 @@ export default function Reports() {
           <div className="grid grid-cols-2 gap-4 mb-5">
             <div>
               <label className="label-eyebrow block mb-1.5">Validation Run</label>
-              <select className="w-full bg-base-card2 border border-base-border rounded-lg px-3 py-2 text-[13px] text-slate-200">
-                <option>{run.id} — {run.target}</option>
-                <option>RUN-041</option>
-                <option>RUN-040</option>
-              </select>
+              <div className="w-full bg-base-card2 border border-base-border rounded-lg px-3 py-2 text-[13px] text-slate-200">
+                {run.id} — {run.target}
+              </div>
             </div>
             <div>
               <label className="label-eyebrow block mb-1.5">Report Type</label>
@@ -80,7 +78,7 @@ export default function Reports() {
               <label className="label-eyebrow block mb-1.5">OWASP Scope</label>
               <select className="w-full bg-base-card2 border border-base-border rounded-lg px-3 py-2 text-[13px] text-slate-200">
                 <option>All Categories</option>
-                <option>Affected Only (8/10)</option>
+                <option>Affected Only ({run.owaspAffected}/{run.owaspTotal})</option>
               </select>
             </div>
           </div>
@@ -115,12 +113,12 @@ export default function Reports() {
           <div className="space-y-3 text-[13px]">
             <div className="flex justify-between"><span className="text-slate-500">Target</span><span className="text-slate-200 font-medium">{run.target}</span></div>
             <div className="flex justify-between"><span className="text-slate-500">Run</span><span className="mono text-brand font-semibold">{run.id}</span></div>
-            <div className="flex justify-between"><span className="text-slate-500">Overall Risk</span><span className="text-sev-high font-bold">{run.risk}/100 · HIGH</span></div>
+            <div className="flex justify-between"><span className="text-slate-500">Overall Risk</span><span className="font-bold" style={{ color: (severityColor[run.severity] ?? severityColor.NEUTRAL).text }}>{run.risk}/100 · {run.severity}</span></div>
             <div className="flex justify-between"><span className="text-slate-500">Total Findings</span><span className="text-slate-200 font-medium">{run.totalFindings}</span></div>
             <div className="flex justify-between"><span className="text-slate-500">Sections Selected</span><span className="text-slate-200 font-medium">{sections.size}/{sectionOptions.length}</span></div>
           </div>
           <div className="mt-5 pt-4 border-t border-base-border text-[11px] text-slate-500 leading-relaxed">
-            Generated reports are structured as a full assessment document — cover, executive summary, scope, findings, OWASP mapping, attack chain analysis, evidence, SHAP explainability, control effectiveness, recommendations, regression analysis and conclusion. Not a dashboard screenshot.
+            Generated reports are structured as a full assessment document — cover, executive summary, scope, findings, OWASP mapping, attack chain analysis, evidence, risk attribution, target control evaluation, recommendations and regression analysis. Every figure comes from the exported scan; nothing is illustrative.
           </div>
         </Panel>
       </div>

@@ -1,5 +1,5 @@
 import { useLocation, Link } from 'react-router-dom'
-import { Search, RefreshCw, Download, Clock, AlertTriangle } from 'lucide-react'
+import { Download, Clock, AlertTriangle } from 'lucide-react'
 import { run, dataSource, targetProfile, isStale } from '../data/scanData'
 
 const titleMap = {
@@ -33,24 +33,11 @@ export default function Topbar() {
         <span className="text-slate-200 font-medium">{current}</span>
       </div>
 
-      <div className="flex items-center gap-2 flex-1 max-w-md">
-        <div className="relative flex-1">
-          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
-          <input
-            placeholder="Search findings, OWASP, evidence..."
-            className="w-full bg-base-card border border-base-border rounded-lg pl-8 pr-3 py-1.5 text-[13px] text-slate-200 placeholder:text-slate-500 focus:outline-none focus:border-brand/60"
-          />
-        </div>
-      </div>
-
       <div className="flex items-center gap-3">
         <div className="hidden lg:flex items-center gap-1.5 text-[12px] text-slate-500">
           <Clock size={13} />
           {run.date}, {run.time}
         </div>
-        <button className="p-2 rounded-lg text-slate-400 hover:text-slate-200 hover:bg-base-card transition-colors">
-          <RefreshCw size={15} />
-        </button>
         {/* Provenance is visible text, not a tooltip: the first question a
             reader has is which scan this is, and a hover target cannot answer
             a question you did not know to ask. */}
@@ -58,7 +45,6 @@ export default function Topbar() {
           className="hidden xl:flex items-center gap-2 text-[11px] text-slate-500 mono border border-base-border rounded-lg px-2 py-1"
           title={`Scan ${dataSource.scan_id ?? 'unknown'} · exported ${dataSource.generated_at ?? 'unknown'}`}
         >
-          <span className="w-1.5 h-1.5 rounded-full bg-sev-low" />
           {targetProfile.url}
           <span className="text-slate-600">|</span>
           <span className="text-slate-400">{dataSource.scan_id ?? 'unknown'}</span>
@@ -79,9 +65,6 @@ export default function Topbar() {
         >
           <Download size={14} /> Export Report
         </Link>
-        <div className="w-8 h-8 rounded-full bg-base-card2 border border-base-border flex items-center justify-center text-[11px] font-bold text-slate-300">
-          SE
-        </div>
       </div>
     </header>
   )

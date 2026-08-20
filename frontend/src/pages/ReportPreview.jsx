@@ -3,7 +3,7 @@ import { Download, FileJson, Printer } from 'lucide-react'
 import {
   run, findings, owaspCategories, riskComponents, factorContributions, contributionFinal,
   attackChainNodes, evidenceItems, dataSource, controlResults, regression, severityColor,
-  chainSummary, recommendedActions
+  chainSummary, recommendedActions, contributionArithmetic, targetProfile
 } from '../data/scanData'
 
 function sevPill(sev) {
@@ -17,6 +17,12 @@ function sevPill(sev) {
 
 export default function ReportPreview() {
   const printRef = useRef(null)
+  // Named from what the scan found, rather than asserting which categories
+  // drove the result before looking.
+  const topCategories = [...owaspCategories]
+    .filter((o) => o.findings > 0)
+    .sort((a, b) => b.risk - a.risk)
+    .slice(0, 2)
 
   // The anchor must be in the document for Firefox to honour the click, and the
   // blob URL must outlive it — revoking synchronously after click() cancels the
@@ -62,7 +68,7 @@ export default function ReportPreview() {
       <div className="flex items-center justify-between mb-5 print:hidden">
         <div>
           <h1 className="text-2xl font-bold text-white">Report Preview</h1>
-          <p className="text-sm text-slate-500 mt-1">{run.id} · {reportName()}</p>
+          <p className="text-sm text-slate-500 mt-1">{run.id} · {run.target}</p>
         </div>
         <div className="flex gap-2">
           <button onClick={exportHTML} className="flex items-center gap-1.5 bg-base-card border border-base-border text-slate-200 text-[13px] font-semibold px-3 py-2 rounded-lg hover:border-brand/50 transition-colors">
@@ -91,7 +97,7 @@ export default function ReportPreview() {
           {/* Executive Summary */}
           <Section title="1 · Executive Summary">
             <div className="grid grid-cols-4 gap-4">
-              <Stat label="Overall Risk" value={run.severity} color="#dc2626" />
+              <Stat label="Overall Risk" value={run.severity} color={severityColor[run.severity]?.text ?? '#0a0e17'} />
               <Stat label="Risk Score" value={`${run.risk}/100`} />
               <Stat label="Critical Findings" value={run.critical} color="#dc2626" />
               <Stat label="OWASP Categories" value={`${run.owaspAffected}/${run.owaspTotal}`} />
@@ -118,24 +124,43 @@ export default function ReportPreview() {
                 <div className="text-[#5a6478]">{run.target}</div>
               </div>
               <div>
-                <div className="font-semibold text-[#0a0e17] mb-1">Validation Type</div>
-                <div className="text-[#5a6478]">Closed-loop continuous red-team validation, OWASP AI Top 10 aligned</div>
+                <div className="font-semibold text-[#0a0e17] mb-1">Application Type</div>
+                <div className="text-[#5a6478]">{targetProfile.type}</div>
               </div>
             </div>
+            {targetProfile.endpoints.length > 0 && (
+              <div className="mt-4">
+                <div className="font-semibold text-[#0a0e17] mb-1 text-sm">Attack surface discovered</div>
+                <div className="flex flex-wrap gap-1.5">
+                  {targetProfile.endpoints.map((e, i) => (
+                    <span key={i} className="font-mono text-[11px] border border-[#d1d5db] rounded px-2 py-0.5 bg-white">
+                      {typeof e === 'string' ? e : (e.path ?? e.name ?? JSON.stringify(e))}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
           </Section>
 
           {/* Risk Score */}
           <Section title="4 · Overall Security Posture & 5 · Risk Score">
             <div className="grid grid-cols-2 gap-8 items-center">
               <div className="text-center">
-                <div className="text-6xl font-extrabold" style={{ color: '#dc2626' }}>{run.risk}</div>
+                <div className="text-6xl font-extrabold" style={{ color: severityColor[run.severity]?.text ?? '#0a0e17' }}>{run.risk}</div>
                 <div className="text-sm text-[#5a6478]">out of 100 · {run.severity} RISK</div>
               </div>
               <div className="space-y-2">
                 {riskComponents.map((c) => (
                   <div key={c.label}>
-                    <div className="flex justify-between text-xs mb-0.5"><span>{c.label}</span><span className="font-bold">{c.score}</span></div>
-                    <div className="h-1.5 bg-[#e5e7eb] rounded-full overflow-hidden"><div className="h-full bg-[#dc2626] rounded-full" style={{ width: `${c.score}%` }} /></div>
+                    <div className="flex justify-between text-xs mb-0.5">
+                      <span>{c.label} <span className="text-[#5a6478]">({c.axis})</span></span>
+                      <span className="font-bold">{c.established ? c.score : 'not established'}</span>
+                    </div>
+                    <div className="h-1.5 bg-[#e5e7eb] rounded-full overflow-hidden">
+                      {c.established && (
+                        <div className="h-full rounded-full" style={{ width: `${c.score}%`, backgroundColor: c.axis === 'impact' ? '#dc2626' : '#ea580c' }} />
+                      )}
+                    </div>
                   </div>
                 ))}
               </div>
@@ -147,7 +172,7 @@ export default function ReportPreview() {
             <table className="w-full text-xs border-collapse">
               <thead>
                 <tr className="border-b-2 border-[#0a0e17] text-left">
-                  <th className="py-2 pr-2">ID</th><th className="py-2 pr-2">Title</th><th className="py-2 pr-2">OWASP</th><th className="py-2 pr-2">Severity</th><th className="py-2 pr-2">Risk</th><th className="py-2 pr-2">Status</th>
+                  <th className="py-2 pr-2">ID</th><th className="py-2 pr-2">Title</th><th className="py-2 pr-2">OWASP</th><th className="py-2 pr-2">Severity</th><th className="py-2 pr-2">Risk</th><th className="py-2 pr-2">Verdict</th>
                 </tr>
               </thead>
               <tbody>
@@ -158,7 +183,7 @@ export default function ReportPreview() {
                     <td className="py-1.5 pr-2 font-mono">{f.owasp}</td>
                     <td className="py-1.5 pr-2">{sevPill(f.severity)}</td>
                     <td className="py-1.5 pr-2 font-bold">{f.risk}</td>
-                    <td className="py-1.5 pr-2">{f.status}</td>
+                    <td className="py-1.5 pr-2">{f.verdict}</td>
                   </tr>
                 ))}
               </tbody>
@@ -190,7 +215,7 @@ export default function ReportPreview() {
                 </span>
               ))}
             </div>
-            <div className="text-sm mt-3">Attack Chain Risk: <span className="font-bold" style={{ color: '#dc2626' }}>{chainSummary.risk}/100</span> · Furthest phase reached: <span className="font-bold">{chainSummary.worstPhaseName ?? '—'}</span></div>
+            <div className="text-sm mt-3">Attack Chain Risk: <span className="font-bold" style={{ color: severityColor[chainSummary.riskLevel]?.text ?? '#0a0e17' }}>{chainSummary.risk}/100</span> · Furthest phase a defence failed at: <span className="font-bold">{chainSummary.worstPhaseName ?? '—'}</span></div>
           </Section>
 
           {/* Evidence */}
@@ -208,14 +233,22 @@ export default function ReportPreview() {
 
           {/* Risk attribution */}
           <Section title="10 · Risk Attribution">
-            <div className="text-sm mb-2">Weighted factor contributions sum to the composite <span className="font-bold" style={{ color: '#dc2626' }}>{contributionFinal}/10</span></div>
+            <div className="text-sm mb-2">
+              {contributionArithmetic ?? `Composite ${contributionFinal}/10`}
+            </div>
+            <p className="text-xs text-[#5a6478] mb-3">
+              The model multiplies likelihood by impact and scales by evidence confidence. Each row
+              below is that factor's weighted share of its own axis.
+            </p>
             <table className="w-full text-xs">
+              <thead><tr className="border-b-2 border-[#0a0e17] text-left"><th className="py-2">Factor</th><th>Axis</th><th>Value</th><th>Share of axis</th></tr></thead>
               <tbody>
                 {factorContributions.map((f) => (
                   <tr key={f.feature} className="border-b border-[#e5e7eb]">
                     <td className="py-1 font-mono">{f.feature}</td>
-                    <td className="py-1" style={{ color: f.direction === 'up' ? '#dc2626' : '#16a34a' }}>{f.contribution > 0 ? '+' : ''}{f.contribution.toFixed(2)}</td>
-                    <td className="py-1 text-[#5a6478]">{f.explain}</td>
+                    <td className="py-1">{f.axis}</td>
+                    <td className="py-1 font-bold">{f.value.toFixed(2)}</td>
+                    <td className="py-1 text-[#5a6478]">{f.contribution.toFixed(2)}</td>
                   </tr>
                 ))}
               </tbody>
@@ -271,9 +304,16 @@ export default function ReportPreview() {
           {/* Conclusion */}
           <Section title="14 · Conclusion">
             <p className="text-sm text-[#3a4152] leading-relaxed">
-              {run.target} presents a HIGH residual risk primarily driven by prompt injection and excessive agency exposure.
-              Addressing the prioritized recommendations above and re-validating in the next scheduled run is advised before
-              expanding this assistant's tool permissions further.
+              {run.target} scored {run.risk}/100 ({run.severity}) across {run.totalFindings} finding
+              {run.totalFindings === 1 ? '' : 's'}, {run.confirmed} of which reached CONFIRMED on
+              deterministic evidence.
+              {topCategories.length > 0 && (
+                <> The heaviest exposure was in {topCategories.map((o) => `${o.id} ${o.name}`).join(' and ')}.</>
+              )}
+              {run.baseRejectedCases === 0 && (
+                <> No probe was rejected by an input control, so no such control was observed on this target.</>
+              )}
+              {' '}Re-validate after remediation to confirm the score moves.
             </p>
           </Section>
         </div>
@@ -284,10 +324,6 @@ export default function ReportPreview() {
       </div>
     </div>
   )
-}
-
-function reportName() {
-  return 'Technical Report'
 }
 
 function Stat({ label, value, color }) {

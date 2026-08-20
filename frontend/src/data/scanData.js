@@ -24,6 +24,10 @@ export const run = scan.run
 export const riskRuns = scan.riskRuns ?? []
 export const owaspCategories = scan.owaspCategories ?? []
 export const findings = scan.findings ?? []
+// Full detail for every finding, keyed by the id the tables link to, so the
+// detail page shows the finding the reader clicked rather than the top one.
+export const findingDetails = scan.findingDetails ?? {}
+// The highest-scoring finding, for pages that describe the worst case.
 export const finding_detail = scan.finding_detail ?? {}
 export const attackChainNodes = scan.attackChainNodes ?? []
 // One ordered phase sequence per chain: what was wanted, how it was sent,
@@ -45,12 +49,18 @@ export const targetProfile = scan.targetProfile ?? { url: '—', type: '—', en
 // knowledge, so this reports what was actually measured.
 export const controlResults = scan.controlResults ?? []
 
-// Real decomposition of the risk score. The model is a weighted linear
-// combination, so weight x value is genuinely each factor's contribution — not
-// an approximation of a model that was never run.
+// Real decomposition of the risk score. The model multiplies likelihood by
+// impact and scales by evidence confidence, so there is no single additive
+// contribution per factor and presenting one would be a fabrication. What is
+// true — and what this exports — is each factor's weighted share of its own
+// axis, plus the two axis values and the arithmetic that combines them.
 const contributions = scan.factorContributions ?? {}
 export const factorContributions = contributions.features ?? []
 export const contributionFinal = contributions.final ?? 0
+export const contributionLikelihood = contributions.likelihood ?? null
+export const contributionImpact = contributions.impact ?? null
+export const contributionConfidence = contributions.confidence ?? null
+export const contributionArithmetic = contributions.arithmetic ?? null
 export const unestablishedFactors = contributions.unestablished ?? []
 
 export const severityColor = {

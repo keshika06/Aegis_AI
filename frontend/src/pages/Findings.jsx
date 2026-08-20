@@ -68,7 +68,7 @@ export default function Findings() {
                 <th className="py-2 pr-3 font-semibold">Confidence</th>
                 <th className="py-2 pr-3 font-semibold">Attack Type</th>
                 <th className="py-2 pr-3 font-semibold">Evidence</th>
-                <th className="py-2 pr-3 font-semibold">Status</th>
+                <th className="py-2 pr-3 font-semibold">Verdict</th>
                 <th className="py-2 pr-3 font-semibold">Last Seen</th>
               </tr>
             </thead>
@@ -83,9 +83,7 @@ export default function Findings() {
                   <td className="py-2.5 pr-3 text-slate-400">{f.confidence}%</td>
                   <td className="py-2.5 pr-3 text-slate-400">{f.attackType}</td>
                   <td className="py-2.5 pr-3 text-slate-400">{f.evidence}</td>
-                  <td className="py-2.5 pr-3">
-                    <span className={`text-[11px] font-bold ${f.status === 'OPEN' ? 'text-sev-high' : 'text-sev-low'}`}>{f.status}</span>
-                  </td>
+                  <td className="py-2.5 pr-3"><SeverityBadge level={f.verdict} /></td>
                   <td className="py-2.5 pr-3 mono text-slate-500 text-xs">{f.lastSeen}</td>
                 </tr>
               ))}
