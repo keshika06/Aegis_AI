@@ -97,3 +97,60 @@ def empty_hint(ctx: AppContext, message: str, hint: str | None = None) -> None:
     ctx.console.print(f"[dim]{message}[/dim]")
     if hint:
         ctx.console.print(f"  [dim]{hint}[/dim]")
+
+
+# --------------------------------------------------------------------------
+# Banner
+# --------------------------------------------------------------------------
+
+BANNER_ART = r"""
+ █████╗ ███████╗ ██████╗ ██╗███████╗ █████╗ ██╗
+██╔══██╗██╔════╝██╔════╝ ██║██╔════╝██╔══██╗██║
+███████║█████╗  ██║  ███╗██║███████╗███████║██║
+██╔══██║██╔══╝  ██║   ██║██║╚════██║██╔══██║██║
+██║  ██║███████╗╚██████╔╝██║███████║██║  ██║██║
+╚═╝  ╚═╝╚══════╝ ╚═════╝ ╚═╝╚══════╝╚═╝  ╚═╝╚═╝
+"""
+
+TAGLINE = "AI APPLICATION SECURITY VALIDATION"
+
+
+def show_banner(ctx: AppContext, subtitle: str | None = None) -> None:
+    """Print the banner, when printing it is appropriate.
+
+    Four conditions suppress it, and each is a correctness requirement rather
+    than a preference:
+
+    * `--json` — a banner ahead of a JSON document makes the document
+      unparseable, which would break every `| jq` in the README.
+    * not a terminal — `aegisai target list > out.txt` should contain the list
+      and nothing else.
+    * `--quiet` — the flag means what it says.
+    * a narrow terminal — the art is 47 columns wide and wraps into noise below
+      that, so a compact wordmark stands in.
+    """
+    if ctx.json_output or ctx.quiet or not ctx.console.is_terminal:
+        return
+
+    version = _version()
+    if ctx.console.width < 52:
+        ctx.console.print(f"\n[bold]AEGISAI[/bold] [dim]v{version}[/dim]\n", highlight=False)
+        return
+
+    ctx.console.print(f"[bold cyan]{BANNER_ART}[/bold cyan]", highlight=False)
+    ctx.console.print(f"  [dim]{TAGLINE}[/dim]  [bold]v{version}[/bold]", highlight=False)
+    if subtitle:
+        ctx.console.print(f"  [dim]{subtitle}[/dim]", highlight=False)
+    ctx.console.print()
+
+
+def _version() -> str:
+    """Read the installed version rather than restating it.
+
+    A literal here would drift from pyproject.toml the first time either is
+    bumped without the other, and a banner advertising the wrong version is a
+    small lie told confidently.
+    """
+    from aegisai import __version__
+
+    return __version__

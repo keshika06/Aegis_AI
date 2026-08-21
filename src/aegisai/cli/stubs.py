@@ -15,5 +15,12 @@ from aegisai.core.exceptions import AegisError
 def planned(command: str, phase: str) -> NoReturn:
     raise AegisError(
         f"`{command}` is not implemented yet — planned for {phase}.",
-        hint="Implemented so far:  doctor, init, config, target",
+        # Naming what *does* work matters more than naming what does not: the
+        # previous hint still listed the Phase 0 four, long after the pipeline
+        # landed, so it told a reader almost nothing works.
+        hint=(
+            "Everything else is implemented:  doctor · init · config · target · "
+            "discover · scan run/list/status/report · findings · risk · chain · "
+            "attack · regression · labs · dashboard"
+        ),
     )

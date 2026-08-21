@@ -42,7 +42,6 @@ app = typer.Typer(
         "and proves impact with deterministic evidence.\n\n"
         "Scanning requires an explicitly authorized target:  aegisai target add <url> --authorize"
     ),
-    no_args_is_help=True,
     add_completion=False,
     rich_markup_mode="rich",
 )
@@ -65,7 +64,7 @@ def _version_callback(value: bool) -> None:
         raise typer.Exit()
 
 
-@app.callback()
+@app.callback(invoke_without_command=True)
 def main_callback(
     ctx: typer.Context,
     config: Path | None = typer.Option(
@@ -90,6 +89,16 @@ def main_callback(
         no_color=no_color,
         assume_yes=assume_yes,
     )
+
+    # A bare `aegisai` shows the banner and the command tree. Typer's
+    # no_args_is_help does the second half but not the first, so the branch is
+    # here rather than in the decorator.
+    if ctx.invoked_subcommand is None:
+        from aegisai.cli import output
+
+        output.show_banner(ctx.obj)
+        ctx.obj.console.print(ctx.get_help())
+        raise typer.Exit()
 
 
 @app.command("doctor")

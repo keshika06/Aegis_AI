@@ -98,7 +98,7 @@ def run_scan(
         scan_id = scan.id
 
     if not app_ctx.json_output:
-        app_ctx.console.print(f"\n  [bold]AEGISAI[/bold]  {scan_id}  →  {target_url}\n")
+        output.show_banner(app_ctx, f"{scan_id}  →  {target_url}")
 
     session = session_factory(engine)()
     try:
@@ -115,7 +115,8 @@ def run_scan(
                 mark = "[green]✓[/green]" if progress.result.ok else "[yellow]![/yellow]"
                 app_ctx.console.print(
                     f"  [{progress.index}/{TOTAL_PIPELINE_STAGES}] "
-                    f"{progress.label:<26} {mark}  [dim]{progress.result.summary}[/dim]"
+                    f"{progress.label:<26} {mark}  [dim]{progress.result.summary}[/dim]",
+                    highlight=False,
                 )
     finally:
         session.close()
@@ -152,12 +153,13 @@ def run_scan(
         )
         app_ctx.console.print(
             f"  {headline} · {counts.get(FindingVerdict.LIKELY, 0)} LIKELY "
-            f"· {counts.get(FindingVerdict.SUSPECTED, 0)} SUSPECTED"
+            f"· {counts.get(FindingVerdict.SUSPECTED, 0)} SUSPECTED",
+            highlight=False,
         )
         # The HTML report is what a person actually opens, so it leads and comes
         # with a copy-pasteable command — the full path is easy to mistype.
-        app_ctx.console.print(f"\n  [bold]report[/bold]     open {html_path}")
-        app_ctx.console.print(f"  [dim]json       {json_path}[/dim]")
+        app_ctx.console.print(f"\n  [bold]report[/bold]     open {html_path}", highlight=False)
+        app_ctx.console.print(f"  [dim]json       {json_path}[/dim]", highlight=False)
         # The dashboard is the surface people actually demo, so it belongs in the
         # summary rather than needing to be discovered in the docs. The scan id
         # is included deliberately: bare `dashboard serve` resolves to the most
@@ -172,7 +174,9 @@ def run_scan(
                 f"  [bold]dashboard[/bold]  aegisai dashboard export {scan_id}"
                 "  [dim](export first)[/dim]"
             )
-        app_ctx.console.print(f"  [dim]details    aegisai findings list {scan_id}[/dim]\n")
+        app_ctx.console.print(
+            f"  [dim]details    aegisai findings list {scan_id}[/dim]\n", highlight=False
+        )
 
     output.emit(app_ctx, payload, render)
 
