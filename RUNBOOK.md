@@ -48,6 +48,7 @@ same for both, only the port and the `--type` change.
 |---|---|---|---|
 | `lab1-chatbot` | 8001 | `chatbot` | Direct prompt injection against a support bot |
 | `lab2-rag` | 8002 | `rag` | Retrieval attacks: cross-tenant reads, poisoned documents, exfiltration |
+| `lab3-secure-chatbot` | 8003 | `chatbot` | The control case — `lab1` built properly, so a scan of both compares like with like |
 
 Two ways to run one. Native is faster and avoids the model running inside a
 container.
@@ -76,7 +77,7 @@ MODEL_NAME="qwen2.5:0.5b" \
 **Docker:**
 
 ```bash
-aegisai labs up lab2     # or `aegisai labs up` for both
+aegisai labs up lab2     # or `aegisai labs up` for all three
 aegisai labs status
 ```
 

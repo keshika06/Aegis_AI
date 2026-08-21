@@ -88,7 +88,7 @@ $ aegisai scan run http://localhost:9999
 | `aegisai chain show` · `aegisai risk show` | Attack chains, risk scores | Phase 5 |
 | `aegisai attack library/plan/variants` | Payload library and generated attacks | Phase 2 / 3 |
 | `aegisai regression list/run` | Closed-loop replay, CI gate | Phase 6 |
-| `aegisai labs up/down/status` | Bundled vulnerable labs | Phase 1 / 7 |
+| `aegisai labs up/down/status` | Bundled demo labs | Phase 1 / 7 |
 | `aegisai serve` | REST API for the dashboard | Phase 8 |
 
 Every read command accepts `--json`, in either position:
@@ -112,12 +112,12 @@ CI branches on these, so they are part of the public contract.
 
 ## The bundled labs
 
-Two intentionally vulnerable applications, so the pipeline can be demonstrated
-safely and repeatably. Both bind to localhost only and contain synthetic data
+Three applications, so the pipeline can be demonstrated safely and repeatably —
+two intentionally vulnerable, and one built properly as the control case. Both bind to localhost only and contain synthetic data
 and synthetic canaries exclusively.
 
 ```bash
-aegisai labs up          # both
+aegisai labs up          # all three
 aegisai labs up lab2     # just one
 aegisai labs status
 ```
@@ -126,6 +126,7 @@ aegisai labs status
 |---|---|---|---|
 | `lab1` | 8001 | Customer-support chatbot | …the **user** attacks the model directly |
 | `lab2` | 8002 | RAG knowledge assistant | …a **document** attacks the model, and the user reaches documents they should not |
+| `lab3` | 8003 | **Defended** support chatbot | …the same application as `lab1`, built properly |
 
 `lab2` exists because retrieval introduces vulnerability classes a chatbot
 cannot have. Its deliberate flaws, and what makes each one provable rather than
@@ -141,6 +142,27 @@ merely suspicious:
 
 Each maps to a boundary in `configs/expected-behaviour/lab2-rag.yaml`, so Stage 6
 catches it deterministically rather than by reading the response and guessing.
+
+### `lab3`, the control case
+
+`lab3` is deliberately the *same application* as `lab1` — same persona, same
+discount tool, same canary, measured against the same contract — with the
+security actually implemented. Scanning both is a controlled comparison rather
+than two unrelated results.
+
+| Layer | What it does | Why `lab1` fails it |
+|---|---|---|
+| Input inspection | Normalises a probe — base64/hex decoded, homoglyphs folded, leetspeak undone, zero-width stripped — *then* matches injection signatures | `lab1` has no input control at all |
+| Secret placement | The canary is held server-side and never enters the prompt | `lab1` puts it in the system prompt and asks the model to keep it |
+| Role separation | User text is only ever a `user` turn | `lab1` concatenates it into the prompt |
+| Egress filtering | Canary, system-prompt phrases and PII are redacted before the reply is returned | `lab1` has no output filter |
+| Tool authorization | The model may only *request* a discount; a server-side authorizer enforces the ceiling | `lab1` scrapes the model's prose and acts on it |
+| Tool allowlist | A tool absent from the allowlist has no code path | `lab1` has no allowlist |
+
+Normalising *before* matching is the part that matters: a filter reading raw
+text catches the one representation someone thought to enumerate, and nothing
+else. It is the difference between a control that holds across an evasion family
+and one that holds against a single payload.
 
 ## Configuration
 

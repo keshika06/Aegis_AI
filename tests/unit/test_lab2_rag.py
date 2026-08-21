@@ -175,8 +175,10 @@ class TestLabRegistry:
     which lab. A lab whose declared type has no contract scans clean for the
     wrong reason, so the registry and the contracts are checked together."""
 
-    def test_both_labs_are_registered(self) -> None:
-        assert set(LABS) == {"lab1", "lab2"}
+    def test_every_lab_is_registered(self) -> None:
+        # lab3 is the control case: the same application as lab1, built
+        # properly, so a scan of both compares like with like.
+        assert set(LABS) == {"lab1", "lab2", "lab3"}
 
     def test_ports_are_distinct(self) -> None:
         ports = [meta["port"] for meta in LABS.values()]

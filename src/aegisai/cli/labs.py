@@ -17,7 +17,7 @@ from aegisai.cli.context import AppContext
 from aegisai.cli.options import JSON_OPTION
 from aegisai.core.exceptions import AegisError, EnvironmentError_
 
-app = typer.Typer(help="Start and stop the bundled vulnerable demo labs.")
+app = typer.Typer(help="Start and stop the bundled demo labs.")
 
 LABS = {
     "lab1": {
@@ -34,6 +34,13 @@ LABS = {
         "port": 8002,
         "description": "Vulnerable RAG knowledge assistant",
         "target_type": "rag",
+    },
+    "lab3": {
+        "port": 8003,
+        # The control case. Same application as lab1, built properly, so a scan
+        # of both is a comparison rather than two unrelated results.
+        "description": "Defended chatbot (control case)",
+        "target_type": "chatbot",
     },
 }
 
@@ -94,7 +101,7 @@ def _selected(lab: str) -> list[str]:
 @app.command("up")
 def labs_up(
     ctx: typer.Context,
-    lab: str = typer.Argument("all", help="lab1 | lab2 | all"),
+    lab: str = typer.Argument("all", help="lab1 | lab2 | lab3 | all"),
     json_: bool = JSON_OPTION,
 ) -> None:
     """Start the vulnerable labs and wait until they actually answer."""
@@ -131,7 +138,7 @@ def labs_up(
 @app.command("down")
 def labs_down(
     ctx: typer.Context,
-    lab: str = typer.Argument("all", help="lab1 | lab2 | all"),
+    lab: str = typer.Argument("all", help="lab1 | lab2 | lab3 | all"),
     json_: bool = JSON_OPTION,
 ) -> None:
     """Stop the vulnerable labs."""

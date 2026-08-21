@@ -48,3 +48,22 @@ services:
     extra_hosts:
       - "host.docker.internal:host-gateway"
     restart: unless-stopped
+
+  lab3:
+    build:
+      context: ../labs/lab3-secure-chatbot
+    container_name: aegisai-lab3
+    ports:
+      # Localhost only, like the others. This one is defended rather than
+      # vulnerable, but it is still a test fixture and not a service.
+      - "127.0.0.1:8003:8003"
+    environment:
+      - OLLAMA_URL=${OLLAMA_URL:-http://host.docker.internal:11434}
+      - MODEL_NAME=${MODEL_NAME:-qwen2.5:0.5b}
+      - MODEL_TIMEOUT_SECONDS=${MODEL_TIMEOUT_SECONDS:-20}
+      # The same canary as Lab 1, so the comparison is exact. Here it is held
+      # server-side and never reaches the model's context.
+      - CANARY_TOKEN=${CANARY_TOKEN:-AEGIS_CANARY_7f9a2b4c1d3e}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    restart: unless-stopped
