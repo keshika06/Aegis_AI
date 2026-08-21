@@ -6,6 +6,7 @@ without colliding at integration time.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Protocol
 
@@ -36,6 +37,24 @@ class ScanContext:
     """Stage 2B transformation families to generate. None means the defaults."""
 
     profile: Profile | None = None
+
+    on_activity: Callable[[str, bool], None] | None = None
+    """Sub-stage progress, for a caller that wants to render it live.
+
+    A stage's `summary` is only produced once it finishes, so Stage 3/4 — which
+    can run for twenty minutes — left the screen showing nothing at all. Long
+    stages report what they are doing through this; short ones need not.
+    """
+
+    def report(self, message: str, *, transient: bool = False) -> None:
+        """Report sub-stage progress, if anyone is listening.
+
+        `transient` marks in-flight noise — "probe 8 of 143, sending" — which a
+        spinner should show and a log should not. An outcome is not transient:
+        it is the line someone scrolls back to find.
+        """
+        if self.on_activity is not None:
+            self.on_activity(message, transient)
 
 
 @dataclass

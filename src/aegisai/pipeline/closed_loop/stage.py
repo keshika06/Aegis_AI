@@ -139,7 +139,12 @@ class ClosedLoopStage:
         }
 
         regressed = 0
-        for test in prior:
+        replay_total = len(prior)
+        for replay_index, test in enumerate(prior, start=1):
+            ctx.report(
+                f"replaying {replay_index}/{replay_total} · {test.owasp_tag or 'unmapped'}",
+                transient=True,
+            )
             outcome = replay(
                 test,
                 target_url=ctx.target_url,

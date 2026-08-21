@@ -50,6 +50,7 @@ class PlannerStage:
         llm_templates: list[AttackTemplate] = []
         llm_error: str | None = None
         if self.use_llm:
+            ctx.report("asking the model for additional attack cases", transient=True)
             router = self.router or ProviderRouter.from_config(ctx.config)
             llm_templates, llm_error = propose_attacks(
                 router,

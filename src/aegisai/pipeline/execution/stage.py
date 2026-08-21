@@ -93,10 +93,18 @@ class ExecutionStage:
         timeout = float(ctx.config.scan.target_timeout_seconds)
 
         counts: dict[str, int] = {}
-        for variant in variants:
+        total = len(variants)
+        for index, variant in enumerate(variants, start=1):
+            ctx.report(
+                f"probe {index}/{total} · {variant.transformation} · sending", transient=True
+            )
             response, sent = self._dispatch(variant, url, text_key, timeout)
             verdict, reason = classify(response)
             counts[verdict.name] = counts.get(verdict.name, 0) + 1
+            ctx.report(
+                f"probe {index}/{total} · {variant.transformation} → {verdict.name}"
+                f"  [{' · '.join(f'{n} {k}' for k, n in sorted(counts.items()))}]"
+            )
 
             ctx.session.add(
                 ControlEvaluation(

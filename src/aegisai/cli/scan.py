@@ -101,8 +101,28 @@ def run_scan(
     if not app_ctx.json_output:
         output.show_banner(app_ctx, f"{scan_id}  →  {target_url}")
 
+    # A stage only produces its summary once it finishes, and Stage 3/4 can run
+    # for twenty minutes — so without this the screen shows nothing at all while
+    # the work that matters is happening. `--verbose` keeps every line instead of
+    # overwriting, which is what you want in a log or when someone asks what the
+    # scanner is actually doing.
+    renderable = not app_ctx.json_output and not app_ctx.quiet
+    # Verbose keeps every outcome as its own line, so a spinner would only
+    # interleave with them; the two modes are alternatives, not layers.
+    live = renderable and app_ctx.console.is_terminal and not app_ctx.verbose
+    status = app_ctx.console.status("", spinner="dots") if live else None
+
+    def on_activity(message: str, transient: bool = False) -> None:
+        if app_ctx.verbose:
+            if renderable and not transient:
+                app_ctx.console.print(f"         [dim]{message}[/dim]", highlight=False)
+        elif status is not None:
+            status.update(f"[dim]{message}[/dim]")
+
     session = session_factory(engine)()
     try:
+        if status is not None:
+            status.start()
         for progress in run_pipeline(
             scan_id=scan_id,
             session=session,
@@ -111,15 +131,22 @@ def run_scan(
             target_id=target_id,
             target_type=target_type,
             families=family_list,
+            on_activity=on_activity,
         ):
             if not app_ctx.json_output and not app_ctx.quiet:
                 mark = "[green]✓[/green]" if progress.result.ok else "[yellow]![/yellow]"
-                app_ctx.console.print(
+                line = (
                     f"  [{progress.index}/{TOTAL_PIPELINE_STAGES}] "
-                    f"{progress.label:<26} {mark}  [dim]{progress.result.summary}[/dim]",
-                    highlight=False,
+                    f"{progress.label:<26} {mark}  [dim]{progress.result.summary}[/dim]"
                 )
+                # Printing through the status keeps the spinner from being
+                # interleaved into the completed line.
+                if status is not None:
+                    status.update("")
+                app_ctx.console.print(line, highlight=False)
     finally:
+        if status is not None:
+            status.stop()
         session.close()
 
     with session_scope(engine) as session:

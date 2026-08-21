@@ -71,6 +71,7 @@ def run_pipeline(
     target_id: str,
     target_type: str = "llm",
     families: list[str] | None = None,
+    on_activity: Callable[[str, bool], None] | None = None,
 ) -> Iterator[StageProgress]:
     """Execute the pipeline, yielding after each stage so callers can render live.
 
@@ -107,6 +108,7 @@ def run_pipeline(
         target_id=target_id,
         target_type=target_type,
         families=families,
+        on_activity=on_activity,
     )
 
     def _finalise(status: ScanStatus, stage: Stage, error: str) -> None:
