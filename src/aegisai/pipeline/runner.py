@@ -77,10 +77,23 @@ def run_pipeline(
     A stage that raises marks the scan FAILED with the error recorded, and an
     interrupt marks it CANCELLED — a scan is never left stuck in RUNNING, which
     is what makes stale-scan recovery unnecessary.
+
+    Cancellation is cooperative and checked between stages, so `scan cancel`
+    takes effect at the next stage boundary rather than immediately. Stage 3/4
+    can run for many minutes, so a request during it waits; killing the process
+    is the immediate option, and the interrupt handler below covers that.
     """
     scan = session.get(Scan, scan_id)
     if scan is None:
         raise ValueError(f"Unknown scan: {scan_id}")
+
+    # A cancellation that lands while the scan is still PENDING would otherwise
+    # be overwritten by the line below and the scan would run anyway.
+    if scan.status == ScanStatus.CANCELLED:
+        scan.completed_at = utcnow()
+        scan.error = "cancelled by request"
+        session.commit()
+        return
 
     scan.status = ScanStatus.RUNNING
     scan.started_at = utcnow()
@@ -108,6 +121,17 @@ def run_pipeline(
 
     for index, stage_cls in enumerate(STAGES, start=1):
         stage = stage_cls()  # type: ignore[operator]
+
+        # `scan cancel` records the request by setting the status; the running
+        # scan is a separate process, so this is the point where it notices.
+        # Expiring first matters: the identity map would otherwise hand back the
+        # RUNNING copy this session wrote itself, and the request would be
+        # invisible to the only process able to honour it.
+        session.expire_all()
+        if session.get(Scan, scan_id).status == ScanStatus.CANCELLED:
+            _finalise(ScanStatus.CANCELLED, stage.stage, "cancelled by request")
+            return
+
         try:
             result = stage.run(ctx)
         except Exception as exc:  # noqa: BLE001 - any stage failure ends the scan cleanly

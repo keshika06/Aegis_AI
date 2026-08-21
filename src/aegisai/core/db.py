@@ -35,6 +35,15 @@ def create_db_engine(cfg: Config) -> Engine:
             # WAL keeps a long-running scan's writes from blocking concurrent reads
             # (`scan status` polling while `scan run` works).
             cursor.execute("PRAGMA journal_mode=WAL")
+            # WAL admits concurrent readers but still allows only one writer, and
+            # SQLite's default busy timeout is zero — a second writer fails on the
+            # spot with "database is locked" rather than waiting. During a scan the
+            # pipeline writes after every stage, so any concurrent write lands in
+            # that window: `scan cancel` could not record its request, and
+            # `target add` failed outright. Five seconds comfortably outlasts a
+            # stage commit while still surfacing a genuine deadlock rather than
+            # hanging on it.
+            cursor.execute("PRAGMA busy_timeout=5000")
             cursor.execute("PRAGMA foreign_keys=ON")
             cursor.close()
 

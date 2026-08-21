@@ -14,9 +14,10 @@ from aegisai.cli.options import JSON_OPTION
 from aegisai.cli.stubs import planned
 from aegisai.cli.target import require_authorized
 from aegisai.core.db import session_factory, session_scope
-from aegisai.core.exceptions import NotFoundError
+from aegisai.core.exceptions import AegisError, NotFoundError
 from aegisai.core.exit_codes import ExitCode
-from aegisai.models.enums import FindingVerdict, ScanStatus
+from aegisai.models.base import utcnow
+from aegisai.models.enums import TERMINAL_STATUSES, FindingVerdict, ScanStatus
 from aegisai.models.finding import Finding
 from aegisai.models.scan import Scan
 from aegisai.models.target import Target
@@ -278,9 +279,51 @@ def list_scans(
 def cancel_scan(
     ctx: typer.Context,
     scan_id: str = typer.Argument(..., help="Scan id."),
+    json_: bool = JSON_OPTION,
 ) -> None:
-    """Stop a running scan."""
-    planned("scan cancel", "Phase 2")
+    """Stop a running scan.
+
+    Records the request by setting the scan's status. A scan running in another
+    process notices at its next stage boundary and stops there, so a request
+    during a long stage waits rather than taking effect immediately.
+    """
+    app_ctx: AppContext = ctx.obj
+    app_ctx.apply_json(json_)
+
+    with session_scope(app_ctx.engine()) as session:
+        scan = session.get(Scan, scan_id)
+        if scan is None:
+            raise AegisError(
+                f"No such scan: {scan_id}",
+                hint="List them with:  aegisai scan list",
+            )
+
+        # Cancelling something already finished would overwrite a real outcome
+        # with a false one, and a COMPLETED scan reported as CANCELLED is worse
+        # than a refusal.
+        if scan.status in TERMINAL_STATUSES:
+            raise AegisError(
+                f"{scan_id} already finished as {scan.status}; there is nothing to cancel.",
+                hint=f"See it with:  aegisai scan status {scan_id}",
+            )
+
+        was = scan.status
+        scan.status = ScanStatus.CANCELLED
+        scan.completed_at = utcnow()
+        scan.error = "cancelled by request"
+        session.commit()
+
+        payload = {"scan_id": scan_id, "previous_status": was, "status": scan.status}
+
+    def render() -> None:
+        output.success(app_ctx, f"{scan_id} cancelled.")
+        if was == ScanStatus.RUNNING:
+            output.info(
+                app_ctx,
+                "  [dim]A scan already running stops at its next stage boundary.[/dim]",
+            )
+
+    output.emit(app_ctx, payload, render)
 
 
 @app.command("report")

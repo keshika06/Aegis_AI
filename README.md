@@ -83,7 +83,7 @@ $ aegisai scan run http://localhost:9999
 | `aegisai scan list` | List scans | ✅ |
 | `aegisai discover <target>` | Stage 1 attack-surface recon | Phase 2 |
 | `aegisai scan run <target>` | Full 11-stage pipeline | Phase 1 |
-| `aegisai scan status/cancel/report` | Scan lifecycle and reports | Phase 1 / 6 |
+| `aegisai scan status/cancel/report` | Scan lifecycle and reports | ✅ |
 | `aegisai findings list/show` | Findings and evidence | Phase 5 |
 | `aegisai chain show` · `aegisai risk show` | Attack chains, risk scores | Phase 5 |
 | `aegisai attack library/plan/variants` | Payload library and generated attacks | Phase 2 / 3 |

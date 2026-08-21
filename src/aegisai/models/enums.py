@@ -23,6 +23,16 @@ class ScanStatus(StrEnum):
     CANCELLED = "CANCELLED"
 
 
+TERMINAL_STATUSES: frozenset[str] = frozenset(
+    {ScanStatus.COMPLETED, ScanStatus.FAILED, ScanStatus.CANCELLED}
+)
+"""Statuses a scan never leaves.
+
+Cancelling one of these would overwrite a real outcome with a false one, and a
+COMPLETED scan reported as CANCELLED is worse than refusing the request.
+"""
+
+
 class Stage(StrEnum):
     """Pipeline stages, named after the boxes in the architecture diagram."""
 
