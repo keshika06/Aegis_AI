@@ -1,4 +1,5 @@
 import { useRef } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { Download, FileJson, Printer } from 'lucide-react'
 // A print surface, fixed light in both themes because it is exported to PDF.
 // It carries its own literal palette rather than the page's theme variables,
@@ -14,6 +15,7 @@ import {
   attackChainNodes, evidenceItems, dataSource, controlResults, regression,
   chainSummary, recommendedActions, contributionArithmetic, targetProfile
 } from '../data/scanData'
+import { planFromParams } from '../data/reportSections'
 
 function sevPill(sev) {
   const c = PRINT_SEVERITY[sev] ?? PRINT_SEVERITY.NEUTRAL
@@ -26,9 +28,27 @@ function sevPill(sev) {
 
 export default function ReportPreview() {
   const printRef = useRef(null)
+  const [params] = useSearchParams()
+  const plan = planFromParams(params)
+
+  // The severity filter selects which findings the report covers; everything
+  // derived from findings follows it. Scan-level sections are left alone —
+  // narrowing those would misreport what the scan actually did.
+  const levels = plan.severity.levels
+  const shownFindings = levels ? findings.filter((f) => levels.includes(f.severity)) : findings
+  // Evidence joins on the raw finding id, not the display id.
+  const shownFindingKeys = new Set(shownFindings.map((f) => f.findingId))
+  const shownEvidence = levels
+    ? evidenceItems.filter((e) => shownFindingKeys.has(e.findingId))
+    : evidenceItems
+  const shownOwasp = owaspCategories.filter((o) => {
+    if (plan.owaspScope === 'affected' && o.findings === 0) return false
+    if (levels && !levels.includes(o.severity)) return false
+    return true
+  })
   // Named from what the scan found, rather than asserting which categories
   // drove the result before looking.
-  const topCategories = [...owaspCategories]
+  const topCategories = [...shownOwasp]
     .filter((o) => o.findings > 0)
     .sort((a, b) => b.risk - a.risk)
     .slice(0, 2)
@@ -52,8 +72,17 @@ export default function ReportPreview() {
 
   const exportJSON = () => {
     const payload = {
-      meta: dataSource, run, findings, owaspCategories, riskComponents,
-      controlResults, regression, evidenceItems, attackChainNodes, factorContributions
+      meta: dataSource,
+      report: {
+        type: plan.type.id,
+        severityFilter: plan.severity.id,
+        owaspScope: plan.owaspScope
+      },
+      run,
+      findings: shownFindings,
+      owaspCategories: shownOwasp,
+      evidenceItems: shownEvidence,
+      riskComponents, controlResults, regression, attackChainNodes, factorContributions
     }
     download(
       new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' }),
@@ -77,7 +106,7 @@ export default function ReportPreview() {
       <div className="flex items-center justify-between mb-5 print:hidden">
         <div>
           <h1 className="text-2xl font-bold text-white">Report Preview</h1>
-          <p className="text-sm text-slate-500 mt-1">{run.id} · {run.target}</p>
+          <p className="text-sm text-slate-500 mt-1">{plan.type.name} · {run.id} · {run.target}</p>
         </div>
         <div className="flex gap-2">
           <button onClick={exportHTML} className="flex items-center gap-1.5 bg-base-card border border-base-border text-slate-200 text-[13px] font-semibold px-3 py-2 rounded-lg hover:border-brand/50 transition-colors">
@@ -97,14 +126,28 @@ export default function ReportPreview() {
         {/* Cover / dark header */}
         <div className="bg-[#0a0e17] text-white px-10 py-14 text-center">
           <div className="text-3xl font-extrabold tracking-tight">AEGIS<span className="text-brand">AI</span></div>
-          <div className="text-xs tracking-[0.2em] text-slate-400 mt-2">AI APPLICATION SECURITY VALIDATION REPORT</div>
+          <div className="text-xs tracking-[0.2em] text-slate-400 mt-2">{plan.type.name.toUpperCase()}</div>
           <div className="mt-8 mono text-brand font-bold text-lg">{run.id}</div>
           <div className="text-sm text-slate-400 mt-1">{run.target} · {run.date}</div>
         </div>
 
+        {(plan.severity.levels || plan.owaspScope === 'affected') && (
+          <div className="bg-[#fef3c7] border-b border-[#fcd34d] px-10 py-3 text-[12px] text-[#78350f]">
+            <span className="font-bold">Filtered report.</span>{' '}
+            {plan.severity.levels && (
+              <>Findings, OWASP rows and evidence are limited to{' '}
+              <span className="font-bold">{plan.severity.label.toLowerCase()}</span> —{' '}
+              showing {shownFindings.length} of {findings.length}. </>
+            )}
+            {plan.owaspScope === 'affected' && <>OWASP mapping shows affected categories only. </>}
+            Scan-level figures (risk score, control evaluation, regression) describe the whole scan.
+          </div>
+        )}
+
         <div className="px-10 py-10 space-y-10">
           {/* Executive Summary */}
-          <Section title="1 · Executive Summary">
+          {plan.shows('exec') && (
+          <Section title={plan.heading('exec')}>
             <div className="grid grid-cols-4 gap-4">
               <Stat label="Overall Risk" value={run.severity} color={PRINT_SEVERITY[run.severity] ?? '#0a0e17'} />
               <Stat label="Risk Score" value={`${run.risk}/100`} />
@@ -124,9 +167,11 @@ export default function ReportPreview() {
                 : ''}
             </p>
           </Section>
+          )}
 
           {/* Scope & Target */}
-          <Section title="2 · Assessment Scope & 3 · Target Profile">
+          {plan.shows('scope') && (
+          <Section title={plan.heading('scope')}>
             <div className="grid grid-cols-2 gap-6 text-sm">
               <div>
                 <div className="font-semibold text-[#0a0e17] mb-1">Target Application</div>
@@ -150,9 +195,11 @@ export default function ReportPreview() {
               </div>
             )}
           </Section>
+          )}
 
           {/* Risk Score */}
-          <Section title="4 · Overall Security Posture & 5 · Risk Score">
+          {plan.shows('risk') && (
+          <Section title={plan.heading('risk')}>
             <div className="grid grid-cols-2 gap-8 items-center">
               <div className="text-center">
                 <div className="text-6xl font-extrabold" style={{ color: PRINT_SEVERITY[run.severity] ?? '#0a0e17' }}>{run.risk}</div>
@@ -175,9 +222,11 @@ export default function ReportPreview() {
               </div>
             </div>
           </Section>
+          )}
 
           {/* Findings */}
-          <Section title="6 · Findings">
+          {plan.shows('findings') && (
+          <Section title={plan.heading('findings')}>
             <table className="w-full text-xs border-collapse">
               <thead>
                 <tr className="border-b-2 border-[#0a0e17] text-left">
@@ -185,7 +234,7 @@ export default function ReportPreview() {
                 </tr>
               </thead>
               <tbody>
-                {findings.map((f) => (
+                {shownFindings.map((f) => (
                   <tr key={f.id} className="border-b border-[#e5e7eb]">
                     <td className="py-1.5 pr-2 font-mono">{f.id}</td>
                     <td className="py-1.5 pr-2">{f.title}</td>
@@ -197,12 +246,20 @@ export default function ReportPreview() {
                 ))}
               </tbody>
             </table>
+            {shownFindings.length === 0 && (
+              <p className="text-xs text-[#5a6478] mt-2">
+                No finding matches the {plan.severity.label.toLowerCase()} filter. The scan
+                recorded {run.totalFindings} finding{run.totalFindings === 1 ? '' : 's'} in total.
+              </p>
+            )}
           </Section>
+          )}
 
           {/* OWASP Mapping */}
-          <Section title="7 · OWASP Mapping">
+          {plan.shows('owasp') && (
+          <Section title={plan.heading('owasp')}>
             <div className="grid grid-cols-5 gap-3">
-              {owaspCategories.map((o) => (
+              {shownOwasp.map((o) => (
                 <div key={o.id} className="border border-[#e5e7eb] rounded-lg p-3">
                   <div className="font-mono text-xs font-bold">{o.id}</div>
                   <div className="text-[11px] text-[#5a6478] mb-2 truncate">{o.name}</div>
@@ -210,11 +267,18 @@ export default function ReportPreview() {
                   <div className="text-[11px] mt-1">{o.findings} findings</div>
                 </div>
               ))}
+              {shownOwasp.length === 0 && (
+                <p className="text-[11px] text-[#5a6478] col-span-5">
+                  No OWASP category matches the selected scope.
+                </p>
+              )}
             </div>
           </Section>
+          )}
 
           {/* Attack Chain */}
-          <Section title="8 · Attack Chain Analysis">
+          {plan.shows('chain') && (
+          <Section title={plan.heading('chain')}>
             <div className="flex items-center flex-wrap gap-1 text-[11px] font-mono">
               {attackChainNodes.length === 0 && <span className="text-[#5a6478]">No attack chain was built for this scan.</span>}
               {attackChainNodes.map((n, i, arr) => (
@@ -226,22 +290,31 @@ export default function ReportPreview() {
             </div>
             <div className="text-sm mt-3">Attack Chain Risk: <span className="font-bold" style={{ color: PRINT_SEVERITY[chainSummary.riskLevel] ?? '#0a0e17' }}>{chainSummary.risk}/100</span> · Furthest phase a defence failed at: <span className="font-bold">{chainSummary.worstPhaseName ?? '—'}</span></div>
           </Section>
+          )}
 
           {/* Evidence */}
-          <Section title="9 · Evidence">
+          {plan.shows('evidence') && (
+          <Section title={plan.heading('evidence')}>
             <div className="grid grid-cols-3 gap-3 text-xs">
-              {evidenceItems.slice(0, 6).map((e) => (
+              {shownEvidence.slice(0, 6).map((e) => (
                 <div key={e.id} className="border border-[#e5e7eb] rounded-lg p-2.5">
                   <div className="font-mono font-bold">{e.id}</div>
                   <div className="text-[#5a6478]">{e.type} · {e.timestamp}</div>
                   <div className="text-[#5a6478]">Confidence: {e.confidence}%</div>
                 </div>
               ))}
+              {shownEvidence.length === 0 && (
+                <p className="text-[#5a6478] col-span-3">
+                  No evidence belongs to a finding matching the selected severity.
+                </p>
+              )}
             </div>
           </Section>
+          )}
 
           {/* Risk attribution */}
-          <Section title="10 · Risk Attribution">
+          {plan.shows('attribution') && (
+          <Section title={plan.heading('attribution')}>
             <div className="text-sm mb-2">
               {contributionArithmetic ?? `Composite ${contributionFinal}/10`}
             </div>
@@ -263,9 +336,11 @@ export default function ReportPreview() {
               </tbody>
             </table>
           </Section>
+          )}
 
           {/* Controls */}
-          <Section title="11 · Target Control Evaluation">
+          {plan.shows('controls') && (
+          <Section title={plan.heading('controls')}>
             <table className="w-full text-xs">
               <thead><tr className="border-b-2 border-[#0a0e17] text-left"><th className="py-2">Family</th><th>Tested</th><th>Rejected</th><th>Accepted</th><th>Accept rate</th></tr></thead>
               <tbody>
@@ -277,9 +352,11 @@ export default function ReportPreview() {
               </tbody>
             </table>
           </Section>
+          )}
 
           {/* Recommendations */}
-          <Section title="12 · Recommendations">
+          {plan.shows('recommendations') && (
+          <Section title={plan.heading('recommendations')}>
             <ol className="list-decimal list-inside text-sm space-y-1 text-[#3a4152]">
               {recommendedActions.map((a) => <li key={a}>{a}</li>)}
               {recommendedActions.length === 0 && (
@@ -287,9 +364,11 @@ export default function ReportPreview() {
               )}
             </ol>
           </Section>
+          )}
 
           {/* Regression */}
-          <Section title="13 · Regression Analysis">
+          {plan.shows('regression') && (
+          <Section title={plan.heading('regression')}>
             <div className="text-sm text-[#3a4152]">
               {regression.total === 0 ? (
                 'No regression tests are stored for this target yet. They are created from confirmed findings.'
@@ -309,9 +388,11 @@ export default function ReportPreview() {
               )}
             </div>
           </Section>
+          )}
 
           {/* Conclusion */}
-          <Section title="14 · Conclusion">
+          {plan.shows('conclusion') && (
+          <Section title={plan.heading('conclusion')}>
             <p className="text-sm text-[#3a4152] leading-relaxed">
               {run.target} scored {run.risk}/100 ({run.severity}) across {run.totalFindings} finding
               {run.totalFindings === 1 ? '' : 's'}, {run.confirmed} of which reached CONFIRMED on
@@ -325,6 +406,7 @@ export default function ReportPreview() {
               {' '}Re-validate after remediation to confirm the score moves.
             </p>
           </Section>
+          )}
         </div>
 
         <div className="bg-[#0a0e17] text-slate-500 text-center text-[11px] py-4">
