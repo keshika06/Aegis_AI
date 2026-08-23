@@ -12,8 +12,9 @@ Overview → Dashboard → Attack Chain → Findings → OWASP Mapping → Risk 
 - React 18 + Vite
 - React Router (HashRouter, so it also works as a static build with no server config)
 - Tailwind CSS (custom dark cybersecurity design tokens in `tailwind.config.js`)
-- Recharts (posture trend, severity donuts, factor bars, control outcomes, risk matrix)
+- Recharts (risk-score trend, severity donuts, factor bars, control outcomes, risk matrix)
 - lucide-react (icons)
+- Vitest + Testing Library (page render tests)
 
 ## Run locally
 
@@ -51,17 +52,55 @@ npm run preview
 
 ## Report generator
 
-`/reports` lets you pick a report type (Executive, Technical, OWASP, Attack
-Chain, Evidence), choose which sections to include, and click **Generate
-Report**, which routes to `/reports/preview` — a print-optimized, light-theme,
-structured security assessment report (cover, executive summary, scope,
-findings, OWASP mapping, attack chain, evidence, risk attribution, target
-control evaluation, recommendations, regression analysis, conclusion). From
-there you can:
+`/reports` builds the report; `/reports/preview` renders it. The builder's four
+controls all reach the document:
+
+- **Report type** (Executive, Technical, OWASP, Attack Chain, Evidence) seeds
+  the section checkboxes. It is a starting selection, not a separate document —
+  tweak the checkboxes from there.
+- **Sections** decide what the report contains. Cover, assessment scope,
+  findings and conclusion are not offered as toggles: a report that omits what
+  was tested or what was found is not a shorter report. Surviving sections are
+  numbered 1..n, so switching one off does not leave a gap in the numbering.
+- **Severity filter** selects which *findings* the report covers; the findings
+  table, OWASP rows and evidence follow it. Scan-level sections (risk score,
+  control evaluation, regression) describe the whole scan and are left alone,
+  because narrowing them would misreport what the scan did.
+- **OWASP scope** limits the mapping to affected categories.
+
+Whenever a filter is active the report carries a banner saying so, and an empty
+findings table says why it is empty. A security document that silently omits
+findings is the one failure mode worth engineering against.
+
+The selection travels as query parameters (`?type=…&sections=…&severity=…`), so
+a generated report survives a reload and can be shared as a link. Opening
+`/reports/preview` with no parameters yields the full report.
+
+The section catalogue lives in `src/data/reportSections.js` and is imported by
+both pages, so a section cannot exist in the builder without existing in the
+document.
+
+From the preview you can:
 
 - **Export HTML** — downloads a standalone `.html` snapshot of the report
 - **Export PDF** — opens the browser print dialog (Save as PDF)
-- **Export JSON** — downloads the underlying structured report data
+- **Export JSON** — downloads the underlying structured report data, filtered
+  the same way the page is, so the file matches the report you were looking at
+
+## Tests
+
+```bash
+npm test          # once
+npm run test:watch
+```
+
+Vitest and Testing Library render every page against the committed
+`scanData.json`. The assertions are derived from that same data rather than
+hardcoded, so re-exporting a scan does not break them, while a dropped prop, a
+renamed key or a page reading data it does not have still fails. That is not
+hypothetical: the risk-score card passed `trend`/`trendUp` to a `KpiCard` that
+reads `delta`/`deltaSuffix`, so the change against the previous run was silently
+dropped and nothing caught it.
 
 ## Data
 
@@ -101,7 +140,7 @@ axis, and the pages label which axis a factor belongs to, because a reader
 comparing a factor against the wrong axis would draw the wrong conclusion about
 what to fix.
 
-The headline number on Overview and Dashboard is a **posture score**: 70% the
+The headline number on Overview and Dashboard is a **risk score**: 70% the
 worst objective plus 30% the mean across all objectives, so one severe finding
 dominates without pinning the number, and remediation actually moves it.
 
