@@ -12,7 +12,7 @@ Overview → Dashboard → Attack Chain → Findings → OWASP Mapping → Risk 
 - React 18 + Vite
 - React Router (HashRouter, so it also works as a static build with no server config)
 - Tailwind CSS (custom dark cybersecurity design tokens in `tailwind.config.js`)
-- Recharts (posture trend, severity donuts, factor bars, control outcomes, risk matrix)
+- Recharts (risk-score trend, severity donuts, factor bars, control outcomes, risk matrix)
 - lucide-react (icons)
 
 ## Run locally
@@ -101,7 +101,7 @@ axis, and the pages label which axis a factor belongs to, because a reader
 comparing a factor against the wrong axis would draw the wrong conclusion about
 what to fix.
 
-The headline number on Overview and Dashboard is a **posture score**: 70% the
+The headline number on Overview and Dashboard is a **risk score**: 70% the
 worst objective plus 30% the mean across all objectives, so one severe finding
 dominates without pinning the number, and remediation actually moves it.
 
