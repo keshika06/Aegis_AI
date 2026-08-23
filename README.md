@@ -220,7 +220,7 @@ A factor that could not be established is recorded as `UNKNOWN` and excluded
 from its axis, with the remaining weights re-normalised. An unmeasured factor
 scored as "no risk" is how a scanner talks itself into a reassuring answer.
 
-The **posture score** the dashboard shows for a whole scan is 70% the worst
+The **risk score** the dashboard shows for a whole scan is 70% the worst
 objective plus 30% the mean across objectives — scored per *objective*, so
 twelve representations of one weakness count once. Reporting the maximum alone
 pinned the headline to whatever single finding scored highest and never moved

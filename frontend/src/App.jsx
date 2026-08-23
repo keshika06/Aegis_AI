@@ -17,7 +17,7 @@ export default function App() {
     <Layout>
       <Routes>
         <Route path="/" element={<Dashboard />} />
-        {/* Overview and Dashboard rendered the same posture gauge, OWASP grid
+        {/* Overview and Dashboard rendered the same risk gauge, OWASP grid
             and attack chain. They are one page now; the old path still
             resolves so existing links and bookmarks do not 404. */}
         <Route path="/dashboard" element={<Navigate to="/" replace />} />

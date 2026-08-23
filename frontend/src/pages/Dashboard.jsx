@@ -49,7 +49,7 @@ export default function Dashboard() {
     <div>
       <PageHeader
         title="Security Command Center"
-        subtitle="Evidence-driven security posture for the current AI application validation run."
+        subtitle="Evidence-driven risk assessment for the current AI application validation run."
         right={
           <div>
             <div className="mono text-brand font-bold text-sm">{run.id}</div>
@@ -61,11 +61,10 @@ export default function Dashboard() {
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
         <KpiCard
           icon={ShieldAlert}
-          label="Posture Score"
+          label="Risk Score"
           value={`${run.risk}/100`}
           sub={run.severity}
-          trend={hasBaseline ? `${Math.abs(delta)} from previous` : null}
-          trendUp={delta > 0}
+          delta={delta}
         />
         <KpiCard icon={ListChecks} label="Total Findings" value={run.totalFindings} sub={`${run.confirmed} confirmed`} />
         <KpiCard icon={Crosshair} label="Critical" value={run.critical} valueColor={t.critical} sub={`${run.high} high · ${run.medium} medium`} />
@@ -74,8 +73,8 @@ export default function Dashboard() {
           label="Attack Success Rate"
           value={run.attackSuccessRate === null ? '—' : `${run.attackSuccessRate}%`}
           sub="objectives confirmed"
-          trend={run.attackSuccessDelta !== null && run.attackSuccessDelta !== undefined ? `${Math.abs(run.attackSuccessDelta)}%` : null}
-          trendUp={run.attackSuccessDelta > 0}
+          delta={run.attackSuccessDelta ?? null}
+          deltaSuffix="%"
         />
         <KpiCard icon={Grid3x3} label="OWASP Coverage" value={`${run.owaspAffected}/${run.owaspTotal}`} sub="categories affected" />
         <KpiCard icon={GitBranch} label="Attack Chains" value={run.attackChains} sub="objectives reaching a finding" />
@@ -95,7 +94,7 @@ export default function Dashboard() {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-5 mb-6">
-        <Panel title="Overall Security Posture" className="flex flex-col items-center">
+        <Panel title="Overall Risk Score" className="flex flex-col items-center">
           <RiskGauge score={run.risk} label={run.severity} />
           {hasBaseline ? (
             <div className="w-full grid grid-cols-3 gap-2 text-center mt-2 pt-3 border-t border-base-border">
@@ -143,7 +142,7 @@ export default function Dashboard() {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-5 mb-6">
-        <Panel title="Posture Score Over Validation Runs" className="lg:col-span-2">
+        <Panel title="Risk Score Over Validation Runs" className="lg:col-span-2">
           {riskRuns.length > 1 ? (
             <ResponsiveContainer width="100%" height={220}>
               <LineChart data={riskRuns} margin={{ left: -20 }}>
@@ -151,7 +150,7 @@ export default function Dashboard() {
                 <XAxis dataKey="run" tick={{ fill: t.axis, fontSize: 11 }} axisLine={{ stroke: t.grid }} tickLine={false} />
                 <YAxis tick={{ fill: t.axis, fontSize: 11 }} axisLine={{ stroke: t.grid }} tickLine={false} domain={[0, 100]} />
                 <Tooltip contentStyle={{ background: t.tooltipBg, border: `1px solid ${t.tooltipBorder}`, borderRadius: 8, fontSize: 12 }} />
-                <Line type="monotone" dataKey="risk" name="Posture" stroke={t.brand} strokeWidth={2.5} dot={{ r: 4, fill: t.brand }} activeDot={{ r: 6 }} />
+                <Line type="monotone" dataKey="risk" name="Risk" stroke={t.brand} strokeWidth={2.5} dot={{ r: 4, fill: t.brand }} activeDot={{ r: 6 }} />
               </LineChart>
             </ResponsiveContainer>
           ) : (

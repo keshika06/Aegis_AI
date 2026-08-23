@@ -170,7 +170,7 @@ score highly, and the score can rank findings instead of pinning every confirmed
 one near the maximum. Factors the scan could not establish are listed as
 `UNKNOWN` and excluded from their axis rather than counted as zero risk.
 
-The dashboard's headline **posture score** aggregates per *objective*, not per
+The dashboard's headline **risk score** aggregates per *objective*, not per
 probe: twelve encodings of one weakness are one weakness. It is 70% the worst
 objective plus 30% the mean across objectives, so one severe finding dominates
 without pinning the number.

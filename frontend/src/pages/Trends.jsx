@@ -52,14 +52,14 @@ export default function Trends() {
 
       {hasHistory && (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 mb-5">
-          <Panel title="Posture Score Over Time">
+          <Panel title="Risk Score Over Time">
             <ResponsiveContainer width="100%" height={220}>
               <LineChart data={riskRuns} margin={{ left: -20 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke={t.grid} />
                 <XAxis dataKey="run" tick={{ fill: t.axis, fontSize: 11 }} axisLine={{ stroke: t.grid }} />
                 <YAxis tick={{ fill: t.axis, fontSize: 11 }} axisLine={{ stroke: t.grid }} domain={[0, 100]} />
                 <Tooltip contentStyle={{ background: t.tooltipBg, border: `1px solid ${t.tooltipBorder}`, borderRadius: 8, fontSize: 12 }} />
-                <Line type="monotone" dataKey="risk" name="Posture" stroke={t.brand} strokeWidth={2.5} dot={{ r: 4 }} />
+                <Line type="monotone" dataKey="risk" name="Risk" stroke={t.brand} strokeWidth={2.5} dot={{ r: 4 }} />
               </LineChart>
             </ResponsiveContainer>
           </Panel>
@@ -96,7 +96,7 @@ export default function Trends() {
 
       <Panel title={regression.prevRun ? `${regression.prevRun} vs ${regression.currentRun}` : `${regression.currentRun} — first recorded run`} className="mb-5">
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-          <Delta label="Posture score" from={regression.riskPrev} to={regression.riskCurrent} />
+          <Delta label="Risk score" from={regression.riskPrev} to={regression.riskCurrent} />
           <Delta label="Critical findings" from={previous?.critical} to={current?.critical} />
           <Delta label="Confirmed findings" from={previous?.confirmed} to={current?.confirmed} />
         </div>
@@ -116,8 +116,8 @@ export default function Trends() {
               <div className="font-bold text-content">{regression.detail.category}</div>
               <div className="text-[13px] text-content-muted mt-1">
                 {regression.detail.prev === null || regression.detail.prev === undefined
-                  ? <>Posture at <span className="mono font-bold text-sev-critical">{regression.detail.current}</span> — no earlier run to compare against.</>
-                  : <>Posture moved <span className="mono font-bold text-sev-critical">{regression.detail.prev} → {regression.detail.current}</span></>}
+                  ? <>Risk score at <span className="mono font-bold text-sev-critical">{regression.detail.current}</span> — no earlier run to compare against.</>
+                  : <>Risk score moved <span className="mono font-bold text-sev-critical">{regression.detail.prev} → {regression.detail.current}</span></>}
               </div>
             </div>
           </div>
